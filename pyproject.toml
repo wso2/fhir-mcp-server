@@ -1,0 +1,50 @@
+[project]
+authors = [
+  {name = "WSO2", email = "dev@wso2.org"},
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.12",
+  "Intended Audience :: Developers",
+  "Operating System :: OS Independent",
+]
+dependencies = [
+  "mcp[cli]>=1.9.1",
+  "aiohttp>=3.12.13",
+  "fhirpy>=2.0.15",
+]
+description = "A Model Context Protocol (MCP) server that provides seamless, standardized access to Fast Healthcare Interoperability Resources (FHIR) data from any compatible FHIR server. Designed for easy integration with AI tools, developer workflows, and healthcare applications, it enables natural language and programmatic search, retrieval, and analysis of clinical data."
+keywords = [
+  "fhir",
+  "healthcare",
+  "mcp",
+  "model-context-protocol",
+  "llm",
+]
+license = "Apache-2.0"
+license-files = ["LICEN[CS]E*"]
+name = "fhir-mcp-server"
+readme = {file = "README.md", content-type = "text/markdown"}
+requires-python = ">=3.12"
+version = "1.0.0"
+
+[build-system]
+build-backend = "hatchling.build"
+requires = ["hatchling"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/fhir_mcp_server"]
+
+[project.scripts]
+fhir-mcp-server = "fhir_mcp_server.server:main"
+
+[[tool.uv.index]]
+name = "pypi"
+publish-url = "https://upload.pypi.org/legacy/"
+url = "https://pypi.org/simple/"
+
+[project.urls]
+"Bug Tracker" = "https://github.com/wso2/fhir-mcp-server/issues"
+"Documentation" = "https://github.com/wso2/fhir-mcp-server/blob/development/README.md"
+"Homepage" = "https://github.com/wso2/fhir-mcp-server"
