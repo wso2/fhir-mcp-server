@@ -28,20 +28,22 @@ logger: logging.Logger = logging.getLogger(__name__)
 
 async def create_async_fhir_client(
     config: FHIROAuthConfigs,
-    access_token: str,
+    access_token: str | None = None,
     extra_headers: dict | None = None,
 ) -> AsyncFHIRClient:
     """Create a FHIR AsyncClient with defaults."""
 
-    client: AsyncFHIRClient = AsyncFHIRClient(
-        url=config.base_url,
-        authorization=f"Bearer {access_token}",
-        aiohttp_config={
+    client_kwargs: Dict = {
+        "url": config.base_url,
+        "aiohttp_config": {
             "timeout": aiohttp.ClientTimeout(total=config.timeout),
         },
-        extra_headers=extra_headers,
-    )
-    return client
+        "extra_headers": extra_headers,
+    }
+    if access_token:
+        client_kwargs["authorization"] = f"Bearer {access_token}"
+
+    return AsyncFHIRClient(**client_kwargs)
 
 
 async def get_bundle_entries(bundle: Dict[str, Any]) -> Dict[str, Any]:
@@ -112,4 +114,4 @@ async def get_capability_statement(metadata_url: str) -> Dict[str, Any]:
 
 
 def get_default_headers() -> Dict[str, str]:
-    return {"Accept": "application/fhir+json"}
+    return {"Accept": "application/fhir+json", "Content-Type": "application/fhir+json"}

@@ -102,7 +102,7 @@ class FHIRClientProvider(httpx.Auth):
         """
         Validate returned scopes against requested scopes.
 
-        Per OAuth 2.1 Section 3.3: server may grant subset, not superset.
+        Per OAuth 2.1 Section 3.2.3: server may grant subset, not superset.
         """
         if not token_response.scope:
             # No scope returned = validation passes
@@ -224,7 +224,6 @@ class FHIRClientProvider(httpx.Auth):
                 timeout=self.configs.timeout,
             )
 
-            await self._validate_token_scopes(token)
             self.token_mapping[token_id] = token
         except Exception as ex:
             logger.exception("Access token request failed. Caused by, ", exc_info=ex)
@@ -261,7 +260,6 @@ class FHIRClientProvider(httpx.Auth):
                 timeout=self.configs.timeout,
             )
 
-            await self._validate_token_scopes(new_token)
             self.token_mapping[token_id] = new_token
         except Exception as ex:
             logger.exception("Token refresh failed. Caused by, ", exc_info=ex)

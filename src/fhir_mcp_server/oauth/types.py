@@ -19,9 +19,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class BaseOAuthConfigs(BaseSettings):
-    client_id: str
-    client_secret: str
-    scope: str
+    client_id: str = ""
+    client_secret: str = ""
+    scope: str = ""
 
     @property
     def scopes(self) -> list[str]:
@@ -32,7 +32,7 @@ class BaseOAuthConfigs(BaseSettings):
 
 
 class MCPOAuthConfigs(BaseOAuthConfigs):
-    metadata_url: str
+    metadata_url: str = ""
 
     def callback_url(
         self, server_url: str, suffix: str = "/oauth/callback"
@@ -41,7 +41,7 @@ class MCPOAuthConfigs(BaseOAuthConfigs):
 
 
 class FHIROAuthConfigs(BaseOAuthConfigs):
-    base_url: str
+    base_url: str = "https://hapi.fhir.org/baseR5"
     timeout: int = 30  # in secs
     access_token: str | None = None
 
@@ -75,9 +75,9 @@ class ServerConfigs(BaseSettings):
     port: int = 8000
     server_url: str | None = None
     # OAuth2 settings
-    oauth: MCPOAuthConfigs
+    oauth: MCPOAuthConfigs = MCPOAuthConfigs()
     # FHIR settings
-    fhir: FHIROAuthConfigs
+    fhir: FHIROAuthConfigs = FHIROAuthConfigs()
 
     @property
     def effective_server_url(self) -> str:

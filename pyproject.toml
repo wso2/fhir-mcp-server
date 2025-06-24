@@ -1,6 +1,6 @@
 [project]
 authors = [
-  {name = "WSO2", email = "dev@wso2.org"},
+  {name = "Vimukthi", email = "vimukthir@wso2.com"},
 ]
 classifiers = [
   "Development Status :: 4 - Beta",
@@ -20,6 +20,7 @@ keywords = [
   "healthcare",
   "mcp",
   "model-context-protocol",
+  "modelcontextprotocol",
   "llm",
 ]
 license = "Apache-2.0"
@@ -27,7 +28,7 @@ license-files = ["LICEN[CS]E*"]
 name = "fhir-mcp-server"
 readme = {file = "README.md", content-type = "text/markdown"}
 requires-python = ">=3.12"
-version = "1.0.0"
+version = "1.0.1"
 
 [build-system]
 build-backend = "hatchling.build"

@@ -60,11 +60,16 @@ You can also run the server directly from the PyPI package (without cloning the 
 uvx fhir-mcp-server
 ```
 
+Check available server options:
+```bash
+uvx run fhir-mcp-server --help
+```
+
 ## VS Code Integration
-Add the following JSON block to your User Settings (JSON) file in VS Code. You can do this by pressing Ctrl + Shift + P and typing Preferences: Open User Settings (JSON).
+Add the following JSON block to your User Settings (JSON) file in VS Code (> V1.101). You can do this by pressing Ctrl + Shift + P and typing Preferences: Open User Settings (JSON).
 
 <table>
-<tr><th>Streamable HTTP</th><th>stdio</th></tr>
+<tr><th>Streamable HTTP</th><th>SSE</th><th>STDIO</th></tr>
 <tr valign=top>
 <td>
 
@@ -72,12 +77,21 @@ Add the following JSON block to your User Settings (JSON) file in VS Code. You c
 "mcp": {
     "servers": {
         "fhir": {
-            "command": "npx",
-            "args": [
-                "-y",
-                "mcp-remote",
-                "http://localhost:8000/mcp"
-            ]
+            "type": "http",
+            "url": "http://localhost:8000/mcp/",
+        }
+    }
+}
+```
+</td>
+<td>
+
+```json
+"mcp": {
+    "servers": {
+        "fhir": {
+            "type": "sse",
+            "url": "http://localhost:8000/sse/",
         }
     }
 }
@@ -118,7 +132,7 @@ Add the following JSON block to your Claude Desktop settings to connect to your 
  - Open the claude_desktop_config.json file in any text editor. Replace its contents with the following JSON block to register the MCP server:
 
 <table>
-<tr><th>Streamable HTTP</th><th>stdio</th></tr>
+<tr><th>Streamable HTTP</th><th>SSE</th></tr><th>STDIO</th></tr>
 <tr valign=top>
 <td>
 
@@ -131,6 +145,23 @@ Add the following JSON block to your Claude Desktop settings to connect to your 
                 "-y",
                 "mcp-remote",
                 "http://localhost:8000/mcp"
+            ]
+        }
+    }
+}
+```
+</td>
+<td>
+
+```json
+{
+    "mcpServers": {
+        "fhir": {
+            "command": "npx",
+            "args": [
+                "-y",
+                "mcp-remote",
+                "http://localhost:8000/sse"
             ]
         }
     }
@@ -172,12 +203,17 @@ Follow these steps to get the MCP Inspector up and running:
 
 - In the MCP Inspector interface:
 <table>
-<tr><th>Streamable HTTP</th><th>stdio</th></tr>
+<tr><th>Streamable HTTP</th><th>SSE</th><th>STDIO</th></tr>
 <tr valign=top>
 <td>
 
 - Transport Type: `Streamable HTTP`
 - URL: `http://localhost:8000/mcp`
+</td>
+<td>
+
+- Transport Type: `SSE`
+- URL: `http://localhost:8000/sse`
 </td>
 <td>
 
@@ -192,9 +228,48 @@ Make sure your MCP server is already running and listening on the above endpoint
 
 Once connected, MCP Inspector will allow you to visualize tool invocations, inspect request/response payloads, and debug your tool implementations easily.
 
+## Tools
+
+- `get_capabilities`: Retrieves metadata about a specified FHIR resource type, including its supported search parameters and custom operations.
+    - `type`: The FHIR resource type name (e.g., "Patient", "Observation", "Encounter")
+
+- `search`: Executes a standard FHIR search interaction on a given resource type, returning a bundle or list of matching resources.
+    - `type`: The FHIR resource type name (e.g., "MedicationRequest", "Condition", "Procedure").
+    - `searchParam`: A mapping of FHIR search parameter names to their desired values (e.g., {"family":"Simpson","birthdate":"1956-05-12"}).
+
+- `read`: Performs a FHIR "read" interaction to retrieve a single resource instance by its type and resource ID, optionally refining the response with search parameters or custom operations.
+    - `type`: The FHIR resource type name (e.g., "DiagnosticReport", "AllergyIntolerance", "Immunization").
+    - `id`: The logical ID of a specific FHIR resource instance.
+    - `searchParam`: A mapping of FHIR search parameter names to their desired values (e.g., {"device-name":"glucometer"}).
+    - `operation`: The name of a custom FHIR operation or extended query defined for the resource (e.g., "$everything").
+
+- `create`: Executes a FHIR "create" interaction to persist a new resource of the specified type.
+    - `type`: The FHIR resource type name (e.g., "Device", "CarePlan", "Goal").
+    - `payload`: A JSON object representing the full FHIR resource body to be created.
+    - `searchParam`: A mapping of FHIR search parameter names to their desired values (e.g., {"address-city":"Boston"}).
+    - `operation`: The name of a custom FHIR operation or extended query defined for the resource (e.g., "$evaluate").
+
+- `update`: Performs a FHIR "update" interaction by replacing an existing resource instance's content with the provided payload.
+    - `type`: The FHIR resource type name (e.g., "Location", "Organization", "Coverage").
+    - `id`: The logical ID of a specific FHIR resource instance.
+    - `payload`: The complete JSON representation of the FHIR resource, containing all required elements and any optional data.
+    - `searchParam`: A mapping of FHIR search parameter names to their desired values (e.g., {"patient":"Patient/54321","relationship":"father"}).
+    - `operation`: The name of a custom FHIR operation or extended query defined for the resource (e.g., "$lastn").
+
+- `delete`: Execute a FHIR "delete" interaction on a specific resource instance.
+    - `type`: The FHIR resource type name (e.g., "ServiceRequest", "Appointment", "HealthcareService").
+    - `id`: The logical ID of a specific FHIR resource instance.
+    - `searchParam`: A mapping of FHIR search parameter names to their desired values (e.g., {"category":"laboratory","issued:"2025-05-01"}).
+    - `operation`: The name of a custom FHIR operation or extended query defined for the resource (e.g., "$expand").
+
 ## Example Prompts
-- Get allergy history for patient 53373
-- Fetch the immunization records for patient ID 53373
-- List all active care plans for patient 22
-- Provide a consolidated report for patient 53373 that includes their complete allergy history as well as all available immunization records, organized by date and highlighting any critical alerts
-- Retrieve all active care plans for patient ID 22 and present them in a markdown table showing each plan’s ID, title, status, intent, and start date
+- Can you create a new record for Homer Simpson? He's male and was born on 12th of May 1956.
+- Record Homer's blood pressure as 120 over 80, taken today at 8 AM.
+- Add a lab report for Homer for a fasting glucose test with a result of 5.6 mmol/L.
+- Can you add Metformin 500mg to Homer's medications? He needs to take it twice a day.
+- Homer is allergic to penicillin and breaks out in a moderate rash, can you add that to his record?
+- Update Homer's Metformin dose to 850mg, still twice a day.
+- Change Homer's allergy reaction from "moderate" to "mild."
+- Show all of Homer's lab results and observations from the past 7 days.
+- Delete the penicillin allergy from Homer's record.
+- Remove Homer Simpson completely from the system.
