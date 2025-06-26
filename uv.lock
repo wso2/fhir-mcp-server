@@ -173,7 +173,7 @@ wheels = [
 
 [[package]]
 name = "fhir-mcp-server"
-version = "1.0.2"
+version = "0.1.9"
 source = { editable = "." }
 dependencies = [
     { name = "aiohttp" },

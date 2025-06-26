@@ -47,7 +47,7 @@ async def create_async_fhir_client(
 
 
 async def get_bundle_entries(bundle: Dict[str, Any]) -> Dict[str, Any]:
-    if "entry" in bundle and isinstance(bundle["entry"], list):
+    if bundle and "entry" in bundle and isinstance(bundle["entry"], list):
         logger.debug(f"found {len(bundle['entry'])} entries for type '{type}'")
         return {
             "entry": [
@@ -71,29 +71,28 @@ def trim_resource(operations: List[Dict[str, Any]]) -> List[Dict[str, Optional[s
 
 
 async def get_operation_outcome_exception() -> dict:
-    return await get_operation_outcome_error(
+    return await get_operation_outcome(
         code="exception", diagnostics="An unexpected internal error has occurred."
     )
 
 
 async def get_operation_outcome_required_error(element: str = "") -> dict:
-    return await get_operation_outcome_error(
+    return await get_operation_outcome(
         code="required", diagnostics=f"A required element {element} is missing."
     )
 
 
-async def get_operation_outcome_error(code: str, diagnostics: str) -> dict:
+async def get_operation_outcome(code: str, diagnostics: str, severity: str = "error") -> dict:
     return {
         "resourceType": "OperationOutcome",
         "issue": [
             {
-                "severity": "error",
+                "severity": severity,
                 "code": code,
                 "diagnostics": diagnostics,
             }
         ],
     }
-
 
 async def get_capability_statement(metadata_url: str) -> Dict[str, Any]:
     """
