@@ -501,7 +501,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
             bundle: dict = await client.resource(resource_type=type, id=id).execute(
                 operation=operation or "",
                 method="PUT",
-                data={id: id, **payload},
+                data={**payload, "id": id},
                 params=searchParam,
             )
             return await get_bundle_entries(bundle=bundle)

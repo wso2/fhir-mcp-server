@@ -1,14 +1,14 @@
 FROM python:3.11-slim
 
 # Install uv (for fast dependency management)
-RUN pip install --upgrade pip && pip install uv
+RUN pip install --upgrade pip
 
 # Set workdir
 WORKDIR /app
 
 # Copy only requirements first for better caching
 COPY requirements.txt ./
-RUN uv pip sync --system requirements.txt
+RUN pip install -r requirements.txt
 
 # Copy the rest of the code
 COPY . .
@@ -22,6 +22,7 @@ EXPOSE 8000
 
 # Set environment variables (can be overridden at runtime)
 ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app/src
 
 # Default command to run the server (can be overridden)
-CMD ["uv", "run", "fhir-mcp-server", "--disable-mcp-auth"]
+CMD ["python", "-m", "fhir_mcp_server", "--disable-mcp-auth"]
