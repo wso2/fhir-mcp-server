@@ -59,14 +59,23 @@ async def get_bundle_entries(bundle: Dict[str, Any]) -> Dict[str, Any]:
     return bundle
 
 
-def trim_resource(operations: List[Dict[str, Any]]) -> List[Dict[str, Optional[str]]]:
-    logger.debug(f"trim_resource called with {len(operations)} operations.")
+def trim_resource_capabilities(
+    capabilities: List[Dict[str, Any]],
+) -> List[Dict[str, Optional[str]]]:
+    logger.debug(
+        f"trim_resource_capabilities called with {len(capabilities)} capabilities."
+    )
     trimmed = [
-        {"name": operation.get("name"), "documentation": operation.get("documentation")}
-        for operation in operations
-        if "name" in operation or "documentation" in operation
+        {
+            "name": capability.get("name"),
+            "documentation": capability.get("documentation"),
+        }
+        for capability in capabilities
+        if "name" in capability or "documentation" in capability
     ]
-    logger.debug(f"trim_resource returning {len(trimmed)} trimmed operations.")
+    logger.debug(
+        f"trim_resource_capabilities returning {len(trimmed)} trimmed capabilities."
+    )
     return trimmed
 
 
@@ -82,7 +91,9 @@ async def get_operation_outcome_required_error(element: str = "") -> dict:
     )
 
 
-async def get_operation_outcome(code: str, diagnostics: str, severity: str = "error") -> dict:
+async def get_operation_outcome(
+    code: str, diagnostics: str, severity: str = "error"
+) -> dict:
     return {
         "resourceType": "OperationOutcome",
         "issue": [
@@ -93,6 +104,7 @@ async def get_operation_outcome(code: str, diagnostics: str, severity: str = "er
             }
         ],
     }
+
 
 async def get_capability_statement(metadata_url: str) -> Dict[str, Any]:
     """

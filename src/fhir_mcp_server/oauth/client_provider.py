@@ -140,11 +140,11 @@ class FHIRClientProvider(httpx.Auth):
                 return
 
             # Try refreshing existing token
-            # if await self._refresh_access_token(token_id):
-            #     return
+            if await self._refresh_access_token(token_id):
+                return
 
-            # Fall back to full OAuth token flow
-            await self._perform_token_flow(token_id)
+            # Fall back to full OAuth flow
+            await self._perform_oauth_flow(token_id)
 
     async def _perform_oauth_flow(self, token_id: str) -> None:
         """Execute OAuth2 authorization code flow with PKCE."""
@@ -187,30 +187,6 @@ class FHIRClientProvider(httpx.Auth):
 
         # Redirect user for authorization
         await self.redirect_handler(auth_url)
-
-    async def _perform_token_flow(self, token_id: str) -> None:
-        """Execute OAuth2 client credentials flow."""
-        logger.debug("Starting client credentials flow.")
-
-        access_token_payload: dict = {
-            "grant_type": "client_credentials",
-            "scope": self.configs.scope,
-            "client_id": self.configs.client_id,
-            "client_secret": self.configs.client_secret,
-            "resource": "https://ohfhirrepositorypoc-ohfhirrepositorypoc.fhir.azurehealthcareapis.com",
-        }
-
-        try:
-            token: OAuthToken = await perform_token_flow(
-                url=self._get_token_endpoint(),
-                data=access_token_payload,
-                timeout=self.configs.timeout,
-            )
-
-            self.token_mapping[token_id] = token
-        except Exception as ex:
-            logger.exception("Access token request failed. Caused by, ", exc_info=ex)
-            raise ValueError("Access token request failed")
 
     async def handle_fhir_oauth_callback(self, code: str, state: str) -> None:
 
@@ -259,8 +235,7 @@ class FHIRClientProvider(httpx.Auth):
 
     def _get_token_endpoint(self) -> str:
         """Get token endpoint."""
-        return "https://login.microsoftonline.com/da76d684-740f-4d94-8717-9d5fb21dd1f9/oauth2/token"
-        # return get_endpoint(self._metadata, "token_endpoint")
+        return get_endpoint(self._metadata, "token_endpoint")
 
     async def _refresh_access_token(self, token_id: str) -> None:
         """Refresh access token using refresh token."""
