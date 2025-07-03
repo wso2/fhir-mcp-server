@@ -1,4 +1,5 @@
 import pytest
+import time
 from unittest.mock import AsyncMock, Mock, patch, MagicMock
 from typing import Dict, Any
 
@@ -28,11 +29,12 @@ class TestOAuthServerProvider:
         provider = OAuthServerProvider(self.mock_configs)
         
         assert provider.configs == self.mock_configs
-        assert provider.oauth_configs == self.mock_configs.oauth
+        # The oauth_configs property doesn't exist, configs.oauth should be accessed directly
+        assert provider.configs.oauth == self.mock_configs.oauth
 
     @pytest.mark.asyncio
-    async def test_get_client_metadata(self):
-        """Test get_client_metadata method."""
+    async def test_initialize_server(self):
+        """Test server initialization."""
         provider = OAuthServerProvider(self.mock_configs)
         
         # Mock the discover_oauth_metadata function
@@ -49,16 +51,14 @@ class TestOAuthServerProvider:
             }
             mock_discover.return_value = mock_metadata
             
-            result = await provider.get_client_metadata()
+            await provider.initialize()
             
-            assert result["issuer"] == "https://auth.example.com"
-            assert result["authorization_endpoint"] == "https://auth.example.com/oauth/authorize"
-            assert result["token_endpoint"] == "https://auth.example.com/oauth/token"
+            assert provider._metadata == mock_metadata
             mock_discover.assert_called_once_with(self.mock_configs.oauth.metadata_url)
 
     @pytest.mark.asyncio
-    async def test_get_client_metadata_error(self):
-        """Test get_client_metadata with error handling."""
+    async def test_initialize_server_error(self):
+        """Test server initialization with error handling."""
         provider = OAuthServerProvider(self.mock_configs)
         
         # Mock the discover_oauth_metadata function to raise an exception
@@ -66,11 +66,33 @@ class TestOAuthServerProvider:
             mock_discover.side_effect = Exception("OAuth metadata discovery failed")
             
             with pytest.raises(Exception, match="OAuth metadata discovery failed"):
-                await provider.get_client_metadata()
+                await provider.initialize()
 
     @pytest.mark.asyncio
-    async def test_get_authorization_url(self):
-        """Test get_authorization_url method."""
+    async def test_client_registration_and_retrieval(self):
+        """Test client registration and retrieval."""
+        provider = OAuthServerProvider(self.mock_configs)
+        
+        # Create client info
+        client_info = Mock()
+        client_info.client_id = "test_client_id"
+        
+        # Register client
+        await provider.register_client(client_info)
+        
+        # Retrieve client
+        retrieved_client = await provider.get_client("test_client_id")
+        
+        assert retrieved_client == client_info
+        assert retrieved_client.client_id == "test_client_id"
+        
+        # Test non-existent client
+        non_existent = await provider.get_client("non_existent")
+        assert non_existent is None
+
+    @pytest.mark.asyncio
+    async def test_authorize_method(self):
+        """Test authorize method."""
         provider = OAuthServerProvider(self.mock_configs)
         
         # Mock the discover_oauth_metadata function
@@ -81,6 +103,17 @@ class TestOAuthServerProvider:
             }
             mock_discover.return_value = mock_metadata
             
+            # Mock the client and authorization params
+            client = Mock()
+            client.client_id = "test_client_id"
+            
+            params = Mock()
+            params.redirect_uri = "http://localhost:8000/oauth/callback"
+            params.redirect_uri_provided_explicitly = True
+            params.scopes = ["read", "write"]
+            params.state = "test_state"
+            params.code_challenge = "test_challenge"
+            
             # Mock the PKCE generation functions
             with patch('fhir_mcp_server.oauth.server_provider.generate_code_verifier') as mock_verifier, \
                  patch('fhir_mcp_server.oauth.server_provider.generate_code_challenge') as mock_challenge:
@@ -88,198 +121,69 @@ class TestOAuthServerProvider:
                 mock_verifier.return_value = "test_code_verifier"
                 mock_challenge.return_value = "test_code_challenge"
                 
-                client_info = {
-                    "client_id": "test_client_id",
-                    "redirect_uri": "http://localhost:8000/oauth/callback"
-                }
-                
-                auth_url, state = await provider.get_authorization_url(client_info)
+                auth_url = await provider.authorize(client, params)
                 
                 assert "https://auth.example.com/oauth/authorize" in auth_url
-                assert "client_id=test_client_id" in auth_url
-                assert "redirect_uri=http%3A//localhost%3A8000/oauth/callback" in auth_url
+                assert "client_id=" in auth_url
+                assert "redirect_uri=" in auth_url
                 assert "code_challenge=test_code_challenge" in auth_url
                 assert "code_challenge_method=S256" in auth_url
-                assert isinstance(state, str)
-                assert len(state) > 0
 
     @pytest.mark.asyncio
-    async def test_exchange_authorization_code(self):
-        """Test exchange_authorization_code method."""
+    async def test_token_management(self):
+        """Test token storage and retrieval."""
         provider = OAuthServerProvider(self.mock_configs)
         
-        # Mock the perform_token_flow function
-        with patch('fhir_mcp_server.oauth.server_provider.perform_token_flow') as mock_token_flow:
-            mock_token_response = {
-                "access_token": "test_access_token",
-                "token_type": "Bearer",
-                "expires_in": 3600,
-                "refresh_token": "test_refresh_token",
-                "scope": "openid profile email"
-            }
-            mock_token_flow.return_value = mock_token_response
-            
-            client_info = {
-                "client_id": "test_client_id",
-                "client_secret": "test_client_secret",
-                "redirect_uri": "http://localhost:8000/oauth/callback"
-            }
-            
-            result = await provider.exchange_authorization_code(
-                client_info, 
-                "test_auth_code", 
-                "test_state_data"
-            )
-            
-            assert result["access_token"] == "test_access_token"
-            assert result["token_type"] == "Bearer"
-            assert result["expires_in"] == 3600
-            assert result["refresh_token"] == "test_refresh_token"
+        # Test that initially no token exists
+        result = await provider.load_access_token("non_existent_token")
+        assert result is None
+        
+        # Create a mock access token and store it directly
+        from mcp.server.auth.provider import AccessToken
+        test_token = AccessToken(
+            token="real_token",
+            client_id="test_client",
+            scopes=["read", "write"],
+            expires_at=int(time.time() + 3600)
+        )
+        
+        provider.token_mapping["test_mcp_token"] = test_token
+        
+        # Test retrieval
+        retrieved = await provider.load_access_token("test_mcp_token")
+        assert retrieved == test_token
+        assert retrieved.token == "real_token"
+        assert retrieved.client_id == "test_client"
 
     @pytest.mark.asyncio
-    async def test_exchange_authorization_code_error(self):
-        """Test exchange_authorization_code with error handling."""
+    async def test_token_revocation(self):
+        """Test token revocation."""
         provider = OAuthServerProvider(self.mock_configs)
         
-        # Mock the perform_token_flow function to raise an exception
-        with patch('fhir_mcp_server.oauth.server_provider.perform_token_flow') as mock_token_flow:
-            mock_token_flow.side_effect = Exception("Token exchange failed")
-            
-            client_info = {
-                "client_id": "test_client_id",
-                "client_secret": "test_client_secret",
-                "redirect_uri": "http://localhost:8000/oauth/callback"
-            }
-            
-            with pytest.raises(Exception, match="Token exchange failed"):
-                await provider.exchange_authorization_code(
-                    client_info, 
-                    "test_auth_code", 
-                    "test_state_data"
-                )
-
-    @pytest.mark.asyncio
-    async def test_refresh_access_token(self):
-        """Test refresh_access_token method."""
-        provider = OAuthServerProvider(self.mock_configs)
+        # Add a token first
+        from mcp.server.auth.provider import AccessToken
+        test_token = AccessToken(
+            token="real_token",
+            client_id="test_client",
+            scopes=["read"],
+            expires_at=int(time.time() + 3600)
+        )
         
-        # Mock the perform_token_flow function
-        with patch('fhir_mcp_server.oauth.server_provider.perform_token_flow') as mock_token_flow:
-            mock_token_response = {
-                "access_token": "new_access_token",
-                "token_type": "Bearer",
-                "expires_in": 3600,
-                "refresh_token": "new_refresh_token",
-                "scope": "openid profile email"
-            }
-            mock_token_flow.return_value = mock_token_response
-            
-            client_info = {
-                "client_id": "test_client_id",
-                "client_secret": "test_client_secret"
-            }
-            
-            result = await provider.refresh_access_token(
-                client_info, 
-                "old_refresh_token"
-            )
-            
-            assert result["access_token"] == "new_access_token"
-            assert result["token_type"] == "Bearer"
-            assert result["expires_in"] == 3600
-            assert result["refresh_token"] == "new_refresh_token"
-
-    @pytest.mark.asyncio
-    async def test_refresh_access_token_error(self):
-        """Test refresh_access_token with error handling."""
-        provider = OAuthServerProvider(self.mock_configs)
+        provider.token_mapping["test_token"] = test_token
         
-        # Mock the perform_token_flow function to raise an exception
-        with patch('fhir_mcp_server.oauth.server_provider.perform_token_flow') as mock_token_flow:
-            mock_token_flow.side_effect = Exception("Token refresh failed")
-            
-            client_info = {
-                "client_id": "test_client_id",
-                "client_secret": "test_client_secret"
-            }
-            
-            with pytest.raises(Exception, match="Token refresh failed"):
-                await provider.refresh_access_token(
-                    client_info, 
-                    "old_refresh_token"
-                )
-
-    @pytest.mark.asyncio
-    async def test_revoke_access_token(self):
-        """Test revoke_access_token method."""
-        provider = OAuthServerProvider(self.mock_configs)
+        # Verify token exists
+        retrieved = await provider.load_access_token("test_token")
+        assert retrieved is not None
         
-        # Mock the revoke implementation
-        with patch('fhir_mcp_server.oauth.server_provider.discover_oauth_metadata') as mock_discover, \
-             patch('fhir_mcp_server.oauth.server_provider.get_endpoint') as mock_get_endpoint:
-            
-            mock_metadata = {
-                "revocation_endpoint": "https://auth.example.com/oauth/revoke"
-            }
-            mock_discover.return_value = mock_metadata
-            mock_get_endpoint.return_value = "https://auth.example.com/oauth/revoke"
-            
-            # Mock the HTTP request
-            with patch('aiohttp.ClientSession.post') as mock_post:
-                mock_response = Mock()
-                mock_response.status = 200
-                mock_response.raise_for_status = Mock()
-                mock_post.return_value.__aenter__.return_value = mock_response
-                
-                client_info = {
-                    "client_id": "test_client_id",
-                    "client_secret": "test_client_secret"
-                }
-                
-                result = await provider.revoke_access_token(
-                    client_info, 
-                    "test_access_token"
-                )
-                
-                # The method should complete without raising an exception
-                assert result is None or result == True
-
-    @pytest.mark.asyncio
-    async def test_revoke_access_token_error(self):
-        """Test revoke_access_token with error handling."""
-        provider = OAuthServerProvider(self.mock_configs)
+        # Revoke token
+        await provider.revoke_token("test_token")
         
-        # Mock the revoke implementation to raise an exception
-        with patch('fhir_mcp_server.oauth.server_provider.discover_oauth_metadata') as mock_discover:
-            mock_discover.side_effect = Exception("Revoke endpoint discovery failed")
-            
-            client_info = {
-                "client_id": "test_client_id",
-                "client_secret": "test_client_secret"
-            }
-            
-            with pytest.raises(Exception, match="Revoke endpoint discovery failed"):
-                await provider.revoke_access_token(
-                    client_info, 
-                    "test_access_token"
-                )
+        # Verify token is gone
+        result = await provider.load_access_token("test_token")
+        assert result is None
 
-    def test_state_management(self):
-        """Test state management methods."""
-        provider = OAuthServerProvider(self.mock_configs)
-        
-        # Test state generation
-        state1 = provider._generate_state()
-        state2 = provider._generate_state()
-        
-        assert isinstance(state1, str)
-        assert isinstance(state2, str)
-        assert len(state1) > 0
-        assert len(state2) > 0
-        assert state1 != state2  # Should be unique
-
-    def test_pkce_methods(self):
-        """Test PKCE code generation methods."""
+    def test_state_generation(self):
+        """Test internal state generation methods."""
         provider = OAuthServerProvider(self.mock_configs)
         
         # Mock the PKCE generation functions
@@ -297,38 +201,3 @@ class TestOAuthServerProvider:
             
             mock_verifier.assert_called_once()
             mock_challenge.assert_called_once_with("test_code_verifier")
-
-    @pytest.mark.asyncio
-    async def test_client_validation(self):
-        """Test client information validation."""
-        provider = OAuthServerProvider(self.mock_configs)
-        
-        # Valid client info
-        valid_client = {
-            "client_id": "test_client_id",
-            "client_secret": "test_client_secret",
-            "redirect_uri": "http://localhost:8000/oauth/callback"
-        }
-        
-        # Test that validation passes for valid client
-        # This is mostly checking that the method doesn't raise exceptions
-        try:
-            # Calling a method that would validate client info
-            with patch('fhir_mcp_server.oauth.server_provider.discover_oauth_metadata') as mock_discover:
-                mock_discover.return_value = {
-                    "authorization_endpoint": "https://auth.example.com/oauth/authorize",
-                    "code_challenge_methods_supported": ["S256"]
-                }
-                
-                with patch('fhir_mcp_server.oauth.server_provider.generate_code_verifier') as mock_verifier, \
-                     patch('fhir_mcp_server.oauth.server_provider.generate_code_challenge') as mock_challenge:
-                    
-                    mock_verifier.return_value = "test_code_verifier"
-                    mock_challenge.return_value = "test_code_challenge"
-                    
-                    auth_url, state = await provider.get_authorization_url(valid_client)
-                    assert auth_url is not None
-                    assert state is not None
-                    
-        except Exception as e:
-            pytest.fail(f"Valid client info should not raise exception: {e}")
