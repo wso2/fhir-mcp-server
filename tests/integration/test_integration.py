@@ -1,4 +1,5 @@
 import pytest
+import os
 from unittest.mock import patch, Mock, AsyncMock
 
 from fhir_mcp_server.oauth.types import ServerConfigs, FHIROAuthConfigs
@@ -89,28 +90,31 @@ class TestIntegration:
 
     def test_config_url_generation_integration(self):
         """Test URL generation integration across different configs."""
-        # Create ServerConfigs with explicit FHIR configuration to avoid env dependency
-        server_config = ServerConfigs(
-            host="api.example.com",
-            port=443,
-            server_url="https://api.example.com"
-        )
-        # Override fhir config to ensure consistent test behavior
-        server_config.fhir.base_url = "https://hapi.fhir.org/baseR5"
-        
-        # Test OAuth callback URL
-        oauth_callback = server_config.oauth.callback_url(server_config.effective_server_url)
-        assert str(oauth_callback) == "https://api.example.com/oauth/callback"
-        
-        # Test FHIR callback URL  
-        fhir_callback = server_config.fhir.callback_url(server_config.effective_server_url)
-        assert str(fhir_callback) == "https://api.example.com/fhir/callback"
-        
-        # Test FHIR discovery URL with explicit config
-        assert server_config.fhir.discovery_url == "https://hapi.fhir.org/baseR5/.well-known/smart-configuration"
-        
-        # Test FHIR metadata URL with explicit config
-        assert server_config.fhir.metadata_url == "https://hapi.fhir.org/baseR5/metadata?_format=json"
+        # Create ServerConfigs with mocked FHIR configuration
+        with patch.dict('os.environ', {}, clear=True):  # Clear env vars to avoid external config
+            server_config = ServerConfigs(
+                host="api.example.com",
+                port=443,
+                server_url="https://api.example.com"
+            )
+            
+            # Mock the FHIR config with test values to avoid external URLs
+            mock_base_url = "https://mock.fhir.local/R4"
+            server_config.fhir.base_url = mock_base_url
+            
+            # Test OAuth callback URL
+            oauth_callback = server_config.oauth.callback_url(server_config.effective_server_url)
+            assert str(oauth_callback) == "https://api.example.com/oauth/callback"
+            
+            # Test FHIR callback URL  
+            fhir_callback = server_config.fhir.callback_url(server_config.effective_server_url)
+            assert str(fhir_callback) == "https://api.example.com/fhir/callback"
+            
+            # Test FHIR discovery URL with mocked config
+            assert server_config.fhir.discovery_url == f"{mock_base_url}/.well-known/smart-configuration"
+            
+            # Test FHIR metadata URL with mocked config
+            assert server_config.fhir.metadata_url == f"{mock_base_url}/metadata?_format=json"
 
     def test_provider_initialization_integration(self):
         """Test that all providers can be initialized together."""
