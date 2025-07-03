@@ -41,7 +41,7 @@ class MCPOAuthConfigs(BaseOAuthConfigs):
 
 
 class FHIROAuthConfigs(BaseOAuthConfigs):
-    base_url: str = "https://hapi.fhir.org/baseR5"
+    base_url: str = ""
     timeout: int = 30  # in secs
     access_token: str | None = None
 

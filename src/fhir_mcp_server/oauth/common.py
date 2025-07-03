@@ -128,7 +128,10 @@ def generate_code_challenge(code_verifier: str) -> str:
 async def perform_token_flow(
     url: str,
     data: Dict[str, str],
-    headers: Dict[str, str] = {"Content-Type": "application/x-www-form-urlencoded"},
+    headers: Dict[str, str] = {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Accept": "application/json",
+    },
     timeout: float = 30.0,
 ) -> OAuthToken:
     try:

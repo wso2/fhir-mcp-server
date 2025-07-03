@@ -173,7 +173,7 @@ wheels = [
 
 [[package]]
 name = "fhir-mcp-server"
-version = "1.0.2"
+version = "0.1.11"
 source = { editable = "." }
 dependencies = [
     { name = "aiohttp" },
@@ -183,9 +183,9 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "aiohttp", specifier = ">=3.12.13" },
-    { name = "fhirpy", specifier = ">=2.0.15" },
-    { name = "mcp", extras = ["cli"], specifier = ">=1.9.1" },
+    { name = "aiohttp", specifier = "==3.12.13" },
+    { name = "fhirpy", specifier = "==2.0.15" },
+    { name = "mcp", extras = ["cli"], specifier = "==1.9.1" },
 ]
 
 [[package]]
