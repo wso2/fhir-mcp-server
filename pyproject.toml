@@ -45,6 +45,18 @@ name = "pypi"
 publish-url = "https://upload.pypi.org/legacy/"
 url = "https://pypi.org/simple/"
 
+[project.optional-dependencies]
+test = [
+  "pytest>=8.0.0",
+  "pytest-asyncio>=0.23.0",
+  "pytest-cov>=4.0.0",
+]
+dev = [
+  "pytest>=8.0.0",
+  "pytest-asyncio>=0.23.0",
+  "pytest-cov>=4.0.0",
+]
+
 [project.urls]
 "Bug Tracker" = "https://github.com/wso2/fhir-mcp-server/issues"
 "Documentation" = "https://github.com/wso2/fhir-mcp-server/blob/development/README.md"

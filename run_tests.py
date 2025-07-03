@@ -10,8 +10,29 @@ import sys
 import os
 
 
+def check_dependencies():
+    """Check if test dependencies are installed."""
+    try:
+        import pytest
+        import pytest_asyncio
+        import pytest_cov
+        return True
+    except ImportError as e:
+        print("❌ Test dependencies not found!")
+        print(f"Missing: {e.name}")
+        print("\nTo install test dependencies, run one of:")
+        print("  pip install -e .[test]")
+        print("  pip install -r requirements-dev.txt")
+        print("  uv sync --dev")
+        return False
+
+
 def run_tests():
     """Run all tests with proper Python path and configuration."""
+    
+    # Check dependencies first
+    if not check_dependencies():
+        return 1
     
     # Set up the environment
     project_root = os.path.dirname(os.path.abspath(__file__))
