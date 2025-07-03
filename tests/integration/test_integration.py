@@ -89,11 +89,14 @@ class TestIntegration:
 
     def test_config_url_generation_integration(self):
         """Test URL generation integration across different configs."""
+        # Create ServerConfigs with explicit FHIR configuration to avoid env dependency
         server_config = ServerConfigs(
             host="api.example.com",
             port=443,
             server_url="https://api.example.com"
         )
+        # Override fhir config to ensure consistent test behavior
+        server_config.fhir.base_url = "https://hapi.fhir.org/baseR5"
         
         # Test OAuth callback URL
         oauth_callback = server_config.oauth.callback_url(server_config.effective_server_url)
@@ -103,10 +106,10 @@ class TestIntegration:
         fhir_callback = server_config.fhir.callback_url(server_config.effective_server_url)
         assert str(fhir_callback) == "https://api.example.com/fhir/callback"
         
-        # Test FHIR discovery URL
+        # Test FHIR discovery URL with explicit config
         assert server_config.fhir.discovery_url == "https://hapi.fhir.org/baseR5/.well-known/smart-configuration"
         
-        # Test FHIR metadata URL
+        # Test FHIR metadata URL with explicit config
         assert server_config.fhir.metadata_url == "https://hapi.fhir.org/baseR5/metadata?_format=json"
 
     def test_provider_initialization_integration(self):
