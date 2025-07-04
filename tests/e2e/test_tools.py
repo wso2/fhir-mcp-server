@@ -180,7 +180,7 @@ async def test_tool_update(mcp_server, patient_id):
 
 
 @pytest.mark.asyncio
-async def test_tool_delete(patient_id):
+async def test_tool_delete(mcp_server, patient_id):
     request_payload = {"type": "Patient", "id": patient_id}
     logger.debug("[TOOL REQUEST] delete:", request_payload)
     try:
