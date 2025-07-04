@@ -47,6 +47,60 @@ Whether you are building healthcare applications, integrating with AI assistants
     cp .env.example .env
     ```
 
+## Configuration
+
+### CLI Options
+
+You can customize the behavior of the MCP server using the following command-line flags:
+
+- **--transport**
+    - Description: Specifies the transport protocol used by the MCP server to communicate with clients.
+    - Accepted values: stdio, sse, streamable-http
+    - Default: streamable-http
+
+- **--log-level**
+    - Description: Sets the logging verbosity level for the server.
+    - Accepted values: DEBUG, INFO, WARN, ERROR (case-insensitive)
+    - Default: INFO
+
+- **--disable-mcp-auth**
+    - Description: Disables OAuth2-based authentication between the MCP client (e.g., Claude Desktop or VSCode) and the MCP server.
+    - Type: Flag (no value required)
+    - Default: False (authentication enabled)
+
+- **--disable-fhir-auth**
+    - Description: Disables OAuth2-based authentication between the MCP server and the FHIR server.
+    - Type: Flag (no value required)
+    - Default: False (authentication enabled)
+
+Sample Usages:
+
+```shell
+uv run fhir-mcp-server --transport streamable-http --log-level DEBUG --disable-mcp-auth --disable-fhir-auth
+```
+
+### Environment Variables
+
+**MCP Server Configurations:**
+- `HEALTHCARE_MCP_HOST`: The hostname or IP address the MCP server should bind to (e.g., 0.0.0.0 for all interfaces, or localhost for local-only access).
+- `HEALTHCARE_MCP_PORT`: The port on which the MCP server will listen for incoming client requests (e.g., 8000).
+
+**MCP Server OAuth2 Configuration (MCP Client ↔ MCP Server):**
+These variables are used when securing communication between an MCP client (like Claude Desktop or VSCode) and the MCP server via OAuth2 Authorization Code Grant flow.
+
+- `HEALTHCARE_MCP_OAUTH__CLIENT_ID`: The OAuth2 client ID registered with your Identity Provider to authenticate MCP clients.
+- `HEALTHCARE_MCP_OAUTH__CLIENT_SECRET`: The OAuth2 client secret used to verify the MCP client during the token exchange process.
+- `HEALTHCARE_MCP_OAUTH__METADATA_URL`: The URL to the Identity Provider’s OAuth2 discovery document (usually ending in .well-known/openid-configuration). Used to dynamically fetch token and authorization endpoints.
+
+**FHIR Backend Configuration (MCP Server ↔ FHIR Server):**
+These variables configure the MCP server’s secure connection with the FHIR backend using authorization code grant flow.
+
+- `HEALTHCARE_MCP_FHIR__CLIENT_ID`: The OAuth2 client ID used by the MCP server to authenticate itself to the FHIR server.
+- `HEALTHCARE_MCP_FHIR__CLIENT_SECRET`: The client secret corresponding to the FHIR client ID. Used during token exchange.
+- `HEALTHCARE_MCP_FHIR__BASE_URL`: The base URL of the FHIR server (e.g., https://hapi.fhir.org/baseR4). This is used to generate tool URIs and to route FHIR requests.
+- `HEALTHCARE_MCP_FHIR__SCOPE`: A space-separated list of OAuth2 scopes to request from the FHIR authorization server (e.g., user/Patient.read user/Observation.read). 
+
+
 ## Usage
 
 Run the server:
@@ -65,7 +119,27 @@ Check available server options:
 uvx run fhir-mcp-server --help
 ```
 
+## Running Tests
+
+To run the tests and ensure your development environment is set up correctly:
+
+1. **Install test dependencies** (if you haven't already):
+    ```bash
+    uv pip install '.[test]'
+    ```
+
+2. **Run the tests:**
+    ```bash
+    pytest tests/
+    ```
+    This will discover and run all tests in the `tests/` directory.
+
+
 ## VS Code Integration
+
+[![Install in VS Code](https://img.shields.io/badge/VS_Code-Install_Server-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=fhir&config=%7B%22type%22%3A%22http%22%2C%22url%22%3A%22http%3A%2F%2Flocalhost%3A8000%2Fmcp%2F%22%7D)
+[![Install in VS Code Insiders](https://img.shields.io/badge/VS_Code_Insiders-Install_Server-24bfa5?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=fhir&config=%7B%22type%22%3A%22http%22%2C%22url%22%3A%22http%3A%2F%2Flocalhost%3A8000%2Fmcp%2F%22%7D)
+
 Add the following JSON block to your User Settings (JSON) file in VS Code (> V1.101). You can do this by pressing Ctrl + Shift + P and typing Preferences: Open User Settings (JSON).
 
 <table>
@@ -261,6 +335,14 @@ Once connected, MCP Inspector will allow you to visualize tool invocations, insp
     - `id`: The logical ID of a specific FHIR resource instance.
     - `searchParam`: A mapping of FHIR search parameter names to their desired values (e.g., {"category":"laboratory","issued:"2025-05-01"}).
     - `operation`: The name of a custom FHIR operation or extended query defined for the resource (e.g., "$expand").
+
+## Screenshots
+
+### EPIC FHIR Integration
+
+| User Enters a Query | User Authenticates | User Grants Consent | LLM Displays the Response |
+|:----------------------:|:-------------------------:|:---------------------------:|:----------------------------:|
+| ![User enters a query](docs/images/vscode/epic/user-enters-query.png) | ![User authenticates](docs/images/vscode/epic/user-authenticates.png) | ![User grants consent](docs/images/vscode/epic/user-grants-consent.png) | ![LLM displays the response](docs/images/vscode/epic/llm-displays-response.png) |
 
 ## Example Prompts
 - Can you create a new record for Homer Simpson? He's male and was born on 12th of May 1956.
