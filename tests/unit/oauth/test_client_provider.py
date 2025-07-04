@@ -7,22 +7,21 @@ from http.client import HTTPException
 from fhir_mcp_server.oauth.client_provider import FHIRClientProvider, webbrowser_redirect_handler
 from fhir_mcp_server.oauth.types import FHIROAuthConfigs, OAuthMetadata, OAuthToken
 
+# Patch webbrowser.open_new_tab for all tests in this module to prevent browser opening
+from unittest.mock import Mock, AsyncMock, patch
 
 class TestWebBrowserRedirectHandler:
     """Test the webbrowser redirect handler function."""
 
     @pytest.mark.asyncio
-    async def test_webbrowser_redirect_handler(self):
+    @patch('fhir_mcp_server.oauth.client_provider.webbrowser.open_new_tab')
+    @patch('builtins.print')
+    async def test_webbrowser_redirect_handler(self, mock_print, mock_open):
         """Test webbrowser redirect handler opens browser."""
         authorization_url = "https://example.com/auth?code=123"
-        
-        with patch('fhir_mcp_server.oauth.client_provider.webbrowser.open_new_tab') as mock_open, \
-             patch('builtins.print') as mock_print:
-            
-            await webbrowser_redirect_handler(authorization_url)
-            
-            mock_print.assert_called_once_with(f"Opening user's browser with URL: {authorization_url}")
-            mock_open.assert_called_once_with(authorization_url)
+        await webbrowser_redirect_handler(authorization_url)
+        mock_print.assert_called_once_with(f"Opening user's browser with URL: {authorization_url}")
+        mock_open.assert_called_once_with(authorization_url)
 
 
 class TestFHIRClientProvider:
@@ -53,7 +52,8 @@ class TestFHIRClientProvider:
         assert self.provider.token_mapping == {}
         assert self.provider._metadata is None
 
-    def test_init_default_redirect_handler(self):
+    @patch('fhir_mcp_server.oauth.client_provider.webbrowser.open_new_tab')
+    def test_init_default_redirect_handler(self, mock_open):
         """Test initialization with default redirect handler."""
         provider = FHIRClientProvider(
             callback_url=self.callback_url,

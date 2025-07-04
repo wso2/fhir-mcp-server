@@ -6,7 +6,6 @@ from typing import Dict, Any
 from fhir_mcp_server.oauth.server_provider import OAuthServerProvider
 from fhir_mcp_server.oauth.types import ServerConfigs, MCPOAuthConfigs
 
-
 class TestOAuthServerProvider:
     """Test the OAuthServerProvider class."""
 
@@ -54,7 +53,10 @@ class TestOAuthServerProvider:
             await provider.initialize()
             
             assert provider._metadata == mock_metadata
-            mock_discover.assert_called_once_with(self.mock_configs.oauth.metadata_url)
+            mock_discover.assert_called_once_with(
+                metadata_url=self.mock_configs.oauth.metadata_url,
+                headers={'Accept': 'application/json'}
+            )
 
     @pytest.mark.asyncio
     async def test_initialize_server_error(self):
@@ -95,39 +97,37 @@ class TestOAuthServerProvider:
         """Test authorize method."""
         provider = OAuthServerProvider(self.mock_configs)
         
-        # Mock the discover_oauth_metadata function
-        with patch('fhir_mcp_server.oauth.server_provider.discover_oauth_metadata') as mock_discover:
-            mock_metadata = {
-                "authorization_endpoint": "https://auth.example.com/oauth/authorize",
-                "code_challenge_methods_supported": ["S256"]
-            }
-            mock_discover.return_value = mock_metadata
+        # Set the required metadata directly
+        provider._metadata = {
+            "authorization_endpoint": "https://auth.example.com/oauth/authorize",
+            "code_challenge_methods_supported": ["S256"]
+        }
+        
+        # Mock the client and authorization params
+        client = Mock()
+        client.client_id = "test_client_id"
+        
+        params = Mock()
+        params.redirect_uri = "http://localhost:8000/oauth/callback"
+        params.redirect_uri_provided_explicitly = True
+        params.scopes = ["read", "write"]
+        params.state = "test_state"
+        params.code_challenge = "test_challenge"
+        
+        # Mock the PKCE generation functions
+        with patch('fhir_mcp_server.oauth.server_provider.generate_code_verifier') as mock_verifier, \
+             patch('fhir_mcp_server.oauth.server_provider.generate_code_challenge') as mock_challenge:
             
-            # Mock the client and authorization params
-            client = Mock()
-            client.client_id = "test_client_id"
+            mock_verifier.return_value = "test_code_verifier"
+            mock_challenge.return_value = "test_code_challenge"
             
-            params = Mock()
-            params.redirect_uri = "http://localhost:8000/oauth/callback"
-            params.redirect_uri_provided_explicitly = True
-            params.scopes = ["read", "write"]
-            params.state = "test_state"
-            params.code_challenge = "test_challenge"
+            auth_url = await provider.authorize(client, params)
             
-            # Mock the PKCE generation functions
-            with patch('fhir_mcp_server.oauth.server_provider.generate_code_verifier') as mock_verifier, \
-                 patch('fhir_mcp_server.oauth.server_provider.generate_code_challenge') as mock_challenge:
-                
-                mock_verifier.return_value = "test_code_verifier"
-                mock_challenge.return_value = "test_code_challenge"
-                
-                auth_url = await provider.authorize(client, params)
-                
-                assert "https://auth.example.com/oauth/authorize" in auth_url
-                assert "client_id=" in auth_url
-                assert "redirect_uri=" in auth_url
-                assert "code_challenge=test_code_challenge" in auth_url
-                assert "code_challenge_method=S256" in auth_url
+            assert "https://auth.example.com/oauth/authorize" in auth_url
+            assert "client_id=" in auth_url
+            assert "redirect_uri=" in auth_url
+            assert "code_challenge=test_code_challenge" in auth_url
+            assert "code_challenge_method=S256" in auth_url
 
     @pytest.mark.asyncio
     async def test_token_management(self):
@@ -201,3 +201,14 @@ class TestOAuthServerProvider:
             
             mock_verifier.assert_called_once()
             mock_challenge.assert_called_once_with("test_code_verifier")
+
+    @pytest.mark.asyncio
+    async def test_authorize_method(self):
+        """Test authorize method."""
+        provider = OAuthServerProvider(self.mock_configs)
+        
+        # Set the required metadata directly
+        provider._metadata = {
+            "authorization_endpoint": "https://auth.example.com/oauth/authorize",
+            "code_challenge_methods_supported": ["S256"]
+        }
