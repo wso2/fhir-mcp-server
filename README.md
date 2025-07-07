@@ -70,7 +70,7 @@ uv sync --dev
 
 ### Running Tests
 
-The project includes a comprehensive test suite with 123+ tests covering all major functionality:
+The project includes a comprehensive test suite covering all major functionality:
 
 ```bash
 # Simple test runner
@@ -81,15 +81,15 @@ PYTHONPATH=src python -m pytest tests/ -v --cov=src/fhir_mcp_server
 ```
 
 **Test Features:**
-- 🧪 **123 tests total** with comprehensive coverage
+- 🧪 **100+ tests** with comprehensive coverage
 - 🔄 **Full async/await support** using pytest-asyncio
 - 🎭 **Complete mocking** of HTTP requests and external dependencies
 - 📊 **Coverage reporting** with terminal and HTML output
 - ⚡ **Fast execution** with no real network calls
 
 The test suite includes:
-- **Unit tests** (118 tests): Core functionality testing
-- **Integration tests** (5 tests): Component interaction validation
+- **Unit tests**: Core functionality testing
+- **Integration tests**: Component interaction validation
 - **Edge case coverage**: Error handling and validation scenarios
 - **Mocked OAuth flows**: Realistic authentication testing
 
