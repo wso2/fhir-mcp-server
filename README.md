@@ -119,21 +119,88 @@ Check available server options:
 uvx run fhir-mcp-server --help
 ```
 
-## Running Tests
+## Docker Setup
 
-To run the tests and ensure your development environment is set up correctly:
+You can run the MCP server using Docker for a consistent, isolated environment. 
 
-1. **Install test dependencies** (if you haven't already):
-    ```bash
-    uv pip install '.[test]'
-    ```
+### 1. Build the Docker Image
 
-2. **Run the tests:**
-    ```bash
-    pytest tests/
-    ```
-    This will discover and run all tests in the `tests/` directory.
+```bash
+docker build -t fhir-mcp-server .
+```
 
+### 2. Configure Environment Variables
+
+Copy the example environment file and edit as needed:
+
+```bash
+cp .env.example .env
+# Edit .env to set your FHIR server, client credentials, etc.
+```
+
+Alternatively, you can pass environment variables directly with `-e` flags or use Docker secrets for sensitive values.
+
+### 3. Run the Container
+
+```bash
+docker run --env-file .env -p 8000:8000 fhir-mcp-server
+```
+
+This will start the server and expose it on port 8000. Adjust the port mapping as needed.
+
+## Development & Testing
+
+### Installing Development Dependencies
+
+To run tests and contribute to development, install the test dependencies:
+
+**Using pip:**
+```bash
+# Install project in development mode with test dependencies
+pip install -e '.[test]'
+
+# Or install from requirements file
+pip install -r requirements-dev.txt
+```
+
+**Using uv:**
+```bash
+# Install development dependencies
+uv sync --dev
+```
+
+### Running Tests
+
+The project includes a comprehensive test suite covering all major functionality:
+
+```bash
+# Simple test runner
+python run_tests.py
+
+# Or direct pytest usage
+PYTHONPATH=src python -m pytest tests/ -v --cov=src/fhir_mcp_server
+```
+**Using pytest:**
+```bash
+pytest tests/
+```
+This will discover and run all tests in the `tests/` directory.
+
+
+**Test Features:**
+- 🧪 **100+ tests** with comprehensive coverage
+- 🔄 **Full async/await support** using pytest-asyncio
+- 🎭 **Complete mocking** of HTTP requests and external dependencies
+- 📊 **Coverage reporting** with terminal and HTML output
+- ⚡ **Fast execution** with no real network calls
+
+The test suite includes:
+- **Unit tests**: Core functionality testing
+- **Integration tests**: Component interaction validation
+- **Edge case coverage**: Error handling and validation scenarios
+- **Mocked OAuth flows**: Realistic authentication testing
+
+Coverage reports are generated in `htmlcov/index.html` for detailed analysis.
 
 ## VS Code Integration
 
