@@ -1,7 +1,23 @@
+# Copyright (c) 2025, WSO2 LLC. (https://www.wso2.com/) All Rights Reserved.
+
+# WSO2 LLC. licenses this file to you under the Apache License,
+# Version 2.0 (the "License"); you may not use this file except
+# in compliance with the License.
+# You may obtain a copy of the License at
+
+# http://www.apache.org/licenses/LICENSE-2.0
+
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied. See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
+from pydantic import AnyHttpUrl
 import pytest
 import asyncio
-import secrets
-from unittest.mock import AsyncMock, Mock, patch, MagicMock
+from unittest.mock import AsyncMock, Mock, patch
 from http.client import HTTPException
 
 from fhir_mcp_server.oauth.client_provider import FHIRClientProvider, webbrowser_redirect_handler
@@ -38,7 +54,7 @@ class TestFHIRClientProvider:
         )
         self.redirect_handler = AsyncMock()
         self.provider = FHIRClientProvider(
-            callback_url=self.callback_url,
+            callback_url=AnyHttpUrl(self.callback_url),
             configs=self.configs,
             redirect_handler=self.redirect_handler
         )
@@ -56,7 +72,7 @@ class TestFHIRClientProvider:
     def test_init_default_redirect_handler(self, mock_open):
         """Test initialization with default redirect handler."""
         provider = FHIRClientProvider(
-            callback_url=self.callback_url,
+            callback_url=AnyHttpUrl(self.callback_url),
             configs=self.configs
         )
         assert provider.redirect_handler == webbrowser_redirect_handler
@@ -87,9 +103,9 @@ class TestFHIRClientProvider:
     async def test_discover_oauth_metadata(self, mock_discover):
         """Test OAuth metadata discovery."""
         mock_metadata = OAuthMetadata(
-            issuer="https://example.com",
-            authorization_endpoint="https://example.com/auth",
-            token_endpoint="https://example.com/token",
+            issuer=AnyHttpUrl("https://example.com"),
+            authorization_endpoint=AnyHttpUrl("https://example.com/auth"),
+            token_endpoint=AnyHttpUrl("https://example.com/token"),
             response_types_supported=["code"]
         )
         mock_discover.return_value = mock_metadata
@@ -228,9 +244,9 @@ class TestFHIRClientProvider:
         """Test OAuth flow execution."""
         token_id = "test_token_id"
         mock_metadata = OAuthMetadata(
-            issuer="https://example.com",
-            authorization_endpoint="https://example.com/auth",
-            token_endpoint="https://example.com/token",
+            issuer=AnyHttpUrl("https://example.com"),
+            authorization_endpoint=AnyHttpUrl("https://example.com/auth"),
+            token_endpoint=AnyHttpUrl("https://example.com/token"),
             response_types_supported=["code"]
         )
         

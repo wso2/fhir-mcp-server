@@ -1,3 +1,19 @@
+# Copyright (c) 2025, WSO2 LLC. (https://www.wso2.com/) All Rights Reserved.
+
+# WSO2 LLC. licenses this file to you under the Apache License,
+# Version 2.0 (the "License"); you may not use this file except
+# in compliance with the License.
+# You may obtain a copy of the License at
+
+# http://www.apache.org/licenses/LICENSE-2.0
+
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied. See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
 import pytest
 import json
 from unittest.mock import AsyncMock, Mock, patch
@@ -6,10 +22,10 @@ from typing import Dict, Any
 from fhir_mcp_server.utils import (
     create_async_fhir_client,
     get_bundle_entries,
-    trim_resource,
+    trim_resource_capabilities,
     get_operation_outcome_exception,
     get_operation_outcome_required_error,
-    get_operation_outcome_error,
+    get_operation_outcome,
     get_capability_statement,
     get_default_headers,
 )
@@ -138,7 +154,7 @@ class TestTrimResource:
             {"name": "create"}  # No documentation
         ]
         
-        result = trim_resource(operations)
+        result = trim_resource_capabilities(operations)
         
         assert len(result) == 3
         assert result[0] == {"name": "read", "documentation": "Read operation"}
@@ -147,7 +163,7 @@ class TestTrimResource:
 
     def test_trim_resource_empty_list(self):
         """Test trimming empty operations list."""
-        result = trim_resource([])
+        result = trim_resource_capabilities([])
         assert result == []
 
     def test_trim_resource_with_extra_fields(self):
@@ -161,7 +177,7 @@ class TestTrimResource:
             }
         ]
         
-        result = trim_resource(operations)
+        result = trim_resource_capabilities(operations)
         
         assert len(result) == 1
         assert result[0] == {"name": "read", "documentation": "Read operation"}
@@ -174,7 +190,7 @@ class TestTrimResource:
             {"documentation": "Create operation"}  # Has documentation
         ]
         
-        result = trim_resource(operations)
+        result = trim_resource_capabilities(operations)
         
         assert len(result) == 2
         assert result[0] == {"name": "search", "documentation": None}
@@ -187,7 +203,7 @@ class TestOperationOutcomeGenerators:
     @pytest.mark.asyncio
     async def test_get_operation_outcome_error(self):
         """Test basic operation outcome error generation."""
-        result = await get_operation_outcome_error("not-found", "Resource not found")
+        result = await get_operation_outcome("not-found", "Resource not found")
         
         expected = {
             "resourceType": "OperationOutcome",

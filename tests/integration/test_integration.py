@@ -1,8 +1,24 @@
-import pytest
-import os
-from unittest.mock import patch, Mock, AsyncMock
+# Copyright (c) 2025, WSO2 LLC. (https://www.wso2.com/) All Rights Reserved.
 
-from fhir_mcp_server.oauth.types import ServerConfigs, FHIROAuthConfigs
+# WSO2 LLC. licenses this file to you under the Apache License,
+# Version 2.0 (the "License"); you may not use this file except
+# in compliance with the License.
+# You may obtain a copy of the License at
+
+# http://www.apache.org/licenses/LICENSE-2.0
+
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied. See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
+from pydantic import AnyHttpUrl
+import pytest
+from unittest.mock import patch, Mock
+
+from fhir_mcp_server.oauth.types import ServerConfigs
 from fhir_mcp_server.oauth.client_provider import FHIRClientProvider
 from fhir_mcp_server.oauth.server_provider import OAuthServerProvider
 
@@ -29,7 +45,7 @@ class TestIntegration:
         assert server_provider.configs == config
         
         client_provider = FHIRClientProvider(
-            callback_url="https://example.com/callback",
+            callback_url=AnyHttpUrl("https://example.com/callback"),
             configs=config.fhir
         )
         assert client_provider.configs == config.fhir

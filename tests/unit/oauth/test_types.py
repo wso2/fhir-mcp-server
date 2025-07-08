@@ -1,5 +1,21 @@
+# Copyright (c) 2025, WSO2 LLC. (https://www.wso2.com/) All Rights Reserved.
+
+# WSO2 LLC. licenses this file to you under the Apache License,
+# Version 2.0 (the "License"); you may not use this file except
+# in compliance with the License.
+# You may obtain a copy of the License at
+
+# http://www.apache.org/licenses/LICENSE-2.0
+
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied. See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
 import pytest
-from pydantic import ValidationError
+from pydantic import AnyHttpUrl, ValidationError
 from fhir_mcp_server.oauth.types import (
     BaseOAuthConfigs,
     MCPOAuthConfigs,
@@ -7,7 +23,7 @@ from fhir_mcp_server.oauth.types import (
     ServerConfigs,
     OAuthMetadata,
     OAuthToken,
-    AuthorizationCode
+    AuthorizationCode,
 )
 
 
@@ -24,9 +40,7 @@ class TestBaseOAuthConfigs:
     def test_config_with_values(self):
         """Test OAuth configuration with values."""
         config = BaseOAuthConfigs(
-            client_id="test_client",
-            client_secret="test_secret",
-            scope="read write"
+            client_id="test_client", client_secret="test_secret", scope="read write"
         )
         assert config.client_id == "test_client"
         assert config.client_secret == "test_secret"
@@ -76,7 +90,9 @@ class TestMCPOAuthConfigs:
     def test_callback_url_custom_suffix(self):
         """Test callback URL generation with custom suffix."""
         config = MCPOAuthConfigs()
-        callback_url = config.callback_url("https://example.com:8000", "/custom/callback")
+        callback_url = config.callback_url(
+            "https://example.com:8000", "/custom/callback"
+        )
         assert str(callback_url) == "https://example.com:8000/custom/callback"
 
 
@@ -86,16 +102,14 @@ class TestFHIROAuthConfigs:
     def test_default_config(self):
         """Test default FHIR OAuth configuration."""
         config = FHIROAuthConfigs()
-        assert config.base_url == "https://hapi.fhir.org/baseR5"
+        assert config.base_url == ""
         assert config.timeout == 30
         assert config.access_token is None
 
     def test_config_with_custom_values(self):
         """Test FHIR OAuth configuration with custom values."""
         config = FHIROAuthConfigs(
-            base_url="https://custom.fhir.org/R4",
-            timeout=60,
-            access_token="test_token"
+            base_url="https://custom.fhir.org/R4", timeout=60, access_token="test_token"
         )
         assert config.base_url == "https://custom.fhir.org/R4"
         assert config.timeout == 60
@@ -116,12 +130,18 @@ class TestFHIROAuthConfigs:
     def test_discovery_url_property(self):
         """Test discovery URL property."""
         config = FHIROAuthConfigs(base_url="https://custom.fhir.org/R4")
-        assert config.discovery_url == "https://custom.fhir.org/R4/.well-known/smart-configuration"
+        assert (
+            config.discovery_url
+            == "https://custom.fhir.org/R4/.well-known/smart-configuration"
+        )
 
     def test_discovery_url_with_trailing_slash(self):
         """Test discovery URL property with trailing slash."""
         config = FHIROAuthConfigs(base_url="https://custom.fhir.org/R4/")
-        assert config.discovery_url == "https://custom.fhir.org/R4/.well-known/smart-configuration"
+        assert (
+            config.discovery_url
+            == "https://custom.fhir.org/R4/.well-known/smart-configuration"
+        )
 
     def test_metadata_url_property(self):
         """Test metadata URL property."""
@@ -169,7 +189,7 @@ class TestServerConfigs:
         # Manually set nested values to test the structure
         config.oauth.client_id = "test_client"
         config.oauth.metadata_url = "https://example.com/oauth"
-        
+
         assert config.oauth.client_id == "test_client"
         assert config.oauth.metadata_url == "https://example.com/oauth"
 
@@ -181,7 +201,7 @@ class TestServerConfigs:
         # Manually set nested values to test the structure
         config.fhir.base_url = "https://custom.fhir.org"
         config.fhir.timeout = 120
-        
+
         assert config.fhir.base_url == "https://custom.fhir.org"
         assert config.fhir.timeout == 120
 
@@ -192,13 +212,13 @@ class TestOAuthMetadata:
     def test_basic_metadata(self):
         """Test basic OAuth metadata."""
         metadata = OAuthMetadata(
-            issuer="https://example.com",
-            authorization_endpoint="https://example.com/auth",
-            token_endpoint="https://example.com/token",
-            response_types_supported=["code"]
+            issuer=AnyHttpUrl("https://example.com"),
+            authorization_endpoint=AnyHttpUrl("https://example.com/auth"),
+            token_endpoint=AnyHttpUrl("https://example.com/token"),
+            response_types_supported=["code"],
         )
         # URLs get normalized by pydantic - trailing slash may be added
-        assert str(metadata.issuer).rstrip('/') == "https://example.com"
+        assert str(metadata.issuer).rstrip("/") == "https://example.com"
         assert str(metadata.authorization_endpoint) == "https://example.com/auth"
         assert str(metadata.token_endpoint) == "https://example.com/token"
         assert metadata.response_types_supported == ["code"]
@@ -206,13 +226,13 @@ class TestOAuthMetadata:
     def test_metadata_with_optional_fields(self):
         """Test OAuth metadata with optional fields."""
         metadata = OAuthMetadata(
-            issuer="https://example.com",
-            authorization_endpoint="https://example.com/auth",
-            token_endpoint="https://example.com/token",
+            issuer=AnyHttpUrl("https://example.com"),
+            authorization_endpoint=AnyHttpUrl("https://example.com/auth"),
+            token_endpoint=AnyHttpUrl("https://example.com/token"),
             response_types_supported=["code"],
             scopes_supported=["read", "write"],
             grant_types_supported=["authorization_code"],
-            code_challenge_methods_supported=["S256"]
+            code_challenge_methods_supported=["S256"],
         )
         assert metadata.scopes_supported == ["read", "write"]
         assert metadata.grant_types_supported == ["authorization_code"]
@@ -224,7 +244,7 @@ class TestOAuthMetadata:
             OAuthMetadata(
                 # Missing required fields
                 issuer="https://example.com"
-            )
+            ) # type: ignore
 
 
 class TestOAuthToken:
@@ -232,10 +252,7 @@ class TestOAuthToken:
 
     def test_basic_token(self):
         """Test basic OAuth token."""
-        token = OAuthToken(
-            access_token="test_access_token",
-            token_type="Bearer"
-        )
+        token = OAuthToken(access_token="test_access_token", token_type="Bearer")
         assert token.access_token == "test_access_token"
         assert token.token_type == "Bearer"
         assert token.expires_in is None
@@ -250,7 +267,7 @@ class TestOAuthToken:
             expires_in=3600,
             scope="read write",
             refresh_token="test_refresh_token",
-            expires_at=1234567890.0
+            expires_at=1234567890.0,
         )
         assert token.access_token == "test_access_token"
         assert token.token_type == "Bearer"
@@ -262,27 +279,18 @@ class TestOAuthToken:
     def test_scopes_property_with_scope(self):
         """Test scopes property with scope string."""
         token = OAuthToken(
-            access_token="test_token",
-            token_type="Bearer",
-            scope="read write admin"
+            access_token="test_token", token_type="Bearer", scope="read write admin"
         )
         assert token.scopes == ["read", "write", "admin"]
 
     def test_scopes_property_no_scope(self):
         """Test scopes property without scope."""
-        token = OAuthToken(
-            access_token="test_token",
-            token_type="Bearer"
-        )
+        token = OAuthToken(access_token="test_token", token_type="Bearer")
         assert token.scopes == []
 
     def test_scopes_property_empty_scope(self):
         """Test scopes property with empty scope."""
-        token = OAuthToken(
-            access_token="test_token",
-            token_type="Bearer",
-            scope=""
-        )
+        token = OAuthToken(access_token="test_token", token_type="Bearer", scope="")
         # Empty scope results in empty list, not list with empty string
         assert token.scopes == []
 
@@ -299,10 +307,10 @@ class TestAuthorizationCode:
             client_id="test_client",
             code_verifier="test_verifier",
             code_challenge="test_challenge",
-            redirect_uri="https://example.com/callback",
-            redirect_uri_provided_explicitly=True
+            redirect_uri=AnyHttpUrl("https://example.com/callback"),
+            redirect_uri_provided_explicitly=True,
         )
-        
+
         assert auth_code.code == "test_code"
         assert auth_code.scopes == ["read", "write"]
         assert auth_code.expires_at == 1234567890.0
@@ -318,4 +326,4 @@ class TestAuthorizationCode:
             AuthorizationCode(
                 # Missing required fields
                 code="test_code"
-            )
+            ) # type: ignore

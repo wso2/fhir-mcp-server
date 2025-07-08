@@ -41,3 +41,11 @@ wheels/
 # Environment variables
 .env
 *.env
+
+# Ignore OS files
+.DS_Store
+
+# Ignore test and coverage outputs
+.coverage
+htmlcov/
+.tox/

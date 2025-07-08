@@ -65,7 +65,7 @@ async def test_utils_functions_require_dependencies():
     Expected test coverage:
     - create_async_fhir_client() with various configurations
     - get_bundle_entries() for FHIR bundle processing
-    - trim_resource() for resource trimming
+    - trim_resource_capabilities() for resource capabilities trimming
     - get_capability_statement() for metadata discovery
     - get_default_headers() for FHIR headers
     """
@@ -73,7 +73,7 @@ async def test_utils_functions_require_dependencies():
     expected_functions = [
         "create_async_fhir_client",
         "get_bundle_entries", 
-        "trim_resource",
+        "trim_resource_capabilities",
         "get_operation_outcome_exception",
         "get_operation_outcome_required_error",
         "get_operation_outcome_error",

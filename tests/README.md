@@ -16,8 +16,12 @@ tests/
 │       ├── test_client_provider.py # Tests for OAuth client provider (30 tests)
 │       └── test_common.py         # Tests for OAuth common functions (33 tests)
 └── integration/                    # Integration tests
+│   ├── __init__.py
+│   └── test_integration.py        # Integration tests (5 tests)
+└── e2e/                            # End-to-end tests
     ├── __init__.py
-    └── test_integration.py        # Integration tests (5 tests)
+    ├── conftest.py
+    └── test_tools.py              # E2E tests for tool flows
 ```
 
 ## Running Tests
