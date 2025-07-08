@@ -47,6 +47,54 @@ Whether you are building healthcare applications, integrating with AI assistants
     cp .env.example .env
     ```
 
+## Development & Testing
+
+### Installing Development Dependencies
+
+To run tests and contribute to development, install the test dependencies:
+
+**Using pip:**
+```bash
+# Install project in development mode with test dependencies
+pip install -e .[test]
+
+# Or install from requirements file
+pip install -r requirements-dev.txt
+```
+
+**Using uv:**
+```bash
+# Install development dependencies
+uv sync --dev
+```
+
+### Running Tests
+
+The project includes a comprehensive test suite covering all major functionality:
+
+```bash
+# Simple test runner
+python run_tests.py
+
+# Or direct pytest usage
+PYTHONPATH=src python -m pytest tests/ -v --cov=src/fhir_mcp_server
+```
+
+**Test Features:**
+- 🧪 **100+ tests** with comprehensive coverage
+- 🔄 **Full async/await support** using pytest-asyncio
+- 🎭 **Complete mocking** of HTTP requests and external dependencies
+- 📊 **Coverage reporting** with terminal and HTML output
+- ⚡ **Fast execution** with no real network calls
+
+The test suite includes:
+- **Unit tests**: Core functionality testing
+- **Integration tests**: Component interaction validation
+- **Edge case coverage**: Error handling and validation scenarios
+- **Mocked OAuth flows**: Realistic authentication testing
+
+Coverage reports are generated in `htmlcov/index.html` for detailed analysis.
+
 ## Usage
 
 Run the server:
