@@ -1,26 +1,43 @@
-# Model Context Protocol (MCP) Server for Fast Healthcare Interoperability Resources (FHIR)
+# Model Context Protocol (MCP) Server for Fast Healthcare Interoperability Resources (FHIR) APIs
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/wso2/fhir-mcp-server/blob/main/LICENSE)
 [![Get Support on Stack Overflow](https://img.shields.io/badge/stackoverflow-wso2-orange)](https://stackoverflow.com/questions/tagged/wso2)
 [![Join the community on Discord](https://img.shields.io/badge/Join%20us%20on-Discord-%23e01563.svg)](https://discord.com/invite/wso2)
 [![X](https://img.shields.io/twitter/follow/wso2.svg?style=social&label=Follow)](https://twitter.com/intent/follow?screen_name=wso2)
 
+## Table of Contents
+- [Overview](#overview)
+- [Prerequisites](#prerequisites)
+- [Setup](#setup)
+- [Configuration](#configuration)
+  - [CLI Options](#cli-options)
+  - [Environment Variables](#environment-variables)
+- [Usage](#usage)
+- [Docker Setup](#docker-setup)
+- [Development & Testing](#development--testing)
+- [VS Code Integration](#vs-code-integration)
+- [Claude Desktop Integration](#claude-desktop-integration)
+- [MCP Inspector Integration](#mcp-inspector-integration)
+- [Tools](#tools)
+- [Screenshots](#screenshots)
+- [Example Prompts](#example-prompts)
+
+
 ## Overview
 
-The MCP Server for FHIR is a Python-based service that provides seamless, standardized access to FHIR data from any compatible FHIR server. Designed for developers, integrators, and healthcare innovators, this server acts as a bridge between modern AI/LLM tools and healthcare data, making it easy to search, retrieve, and analyze clinical information.
+The FHIR MCP Server is a Model Context Protocol (MCP) server that provides seamless integration with FHIR APIs. Designed for developers, integrators, and healthcare innovators, this server acts as a bridge between modern AI/LLM tools and healthcare data, making it easy to search, retrieve, and analyze clinical information.
 
-**Key features:**
-- **Flexible Integration:** Use the server from the command line, in Docker, or directly within tools like VS Code, Claude Desktop, and MCP Inspector.
-- **Natural Language FHIR Search:** Query for patients, allergies, immunizations, care plans, and more using simple prompts or programmatic requests.
-- **Configurable & Secure:** Easily connect to any FHIR server, with support for environment-based configuration and secure access tokens.
-- **Developer Friendly:** Quick setup with modern Python tooling (`uv`), clear documentation, and ready-to-use integration examples for rapid prototyping and deployment.
+### Core Features
+🔗 MCP-compatible transport: Serves FHIR via stdio, SSE, or streamable HTTP
 
-Whether you are building healthcare applications, integrating with AI assistants, or exploring clinical datasets, the MCP server provides a robust foundation for accessing and working with FHIR data in a standardized, extensible way.
+🔐 SMART-on-FHIR based authentication support: Securely authenticate with FHIR servers and clients
+
+⚙️ Tool integration: Integratable with any MCP client such as VS Code, Claude Desktop, and MCP Inspector
 
 ## Prerequisites
 - Python 3.8+
 - [uv](https://github.com/astral-sh/uv) (for dependency management)
-- An accessible FHIR server (defaults to the public HAPI FHIR test server)
+- An accessible FHIR API server.
 
 ## Setup
 
