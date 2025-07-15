@@ -21,7 +21,7 @@ from unittest.mock import Mock, patch
 
 from mcp.shared.auth import OAuthClientInformationFull
 from fhir_mcp_server.oauth.server_provider import OAuthServerProvider
-from fhir_mcp_server.oauth.types import OAuthMetadata, ServerConfigs, MCPOAuthConfigs
+from fhir_mcp_server.oauth.types import OAuthMetadata, ServerConfigs, FHIROAuthConfigs
 
 
 class TestOAuthServerProvider:
@@ -32,10 +32,11 @@ class TestOAuthServerProvider:
         self.mock_configs = ServerConfigs(
             host="localhost", port=8000, server_url="http://localhost:8000"
         )
-        self.mock_configs.oauth = MCPOAuthConfigs(
+        self.mock_configs.fhir_oauth = FHIROAuthConfigs(
             client_id="test_client_id",
             client_secret="test_client_secret",
-            metadata_url="https://auth.example.com/.well-known/oauth-authorization-server",
+            base_url="https://auth.example.com",
+            scope="read write"
         )
 
     @pytest.mark.asyncio
@@ -44,8 +45,8 @@ class TestOAuthServerProvider:
         provider = OAuthServerProvider(self.mock_configs)
 
         assert provider.configs == self.mock_configs
-        # The oauth_configs property doesn't exist, configs.oauth should be accessed directly
-        assert provider.configs.oauth == self.mock_configs.oauth
+        # The oauth_configs property doesn't exist, configs.fhir_oauth should be accessed directly
+        assert provider.configs.fhir_oauth == self.mock_configs.fhir_oauth
 
     @pytest.mark.asyncio
     async def test_initialize_server(self):
@@ -72,7 +73,7 @@ class TestOAuthServerProvider:
 
             assert provider._metadata == mock_metadata
             mock_discover.assert_called_once_with(
-                metadata_url=self.mock_configs.oauth.metadata_url,
+                metadata_url=self.mock_configs.fhir_oauth.discovery_url,
                 headers={"Accept": "application/json"},
             )
 
@@ -157,7 +158,7 @@ class TestOAuthServerProvider:
             auth_url = await provider.authorize(client, params)
 
             assert "https://auth.example.com/oauth/authorize" in auth_url
-            assert "client_id=" in auth_url
+            assert "client_id=test_client_id" in auth_url
             assert "redirect_uri=" in auth_url
             assert "code_challenge=test_code_challenge" in auth_url
             assert "code_challenge_method=S256" in auth_url

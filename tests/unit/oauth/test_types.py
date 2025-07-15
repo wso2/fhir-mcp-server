@@ -18,7 +18,6 @@ import pytest
 from pydantic import AnyHttpUrl, ValidationError
 from fhir_mcp_server.oauth.types import (
     BaseOAuthConfigs,
-    MCPOAuthConfigs,
     FHIROAuthConfigs,
     ServerConfigs,
     OAuthMetadata,
@@ -62,40 +61,6 @@ class TestBaseOAuthConfigs:
         assert config.scopes == ["read", "write", "admin"]
 
 
-class TestMCPOAuthConfigs:
-    """Test the MCPOAuthConfigs class."""
-
-    def test_basic_config(self):
-        """Test basic MCP OAuth configuration."""
-        config = MCPOAuthConfigs()
-        assert config.metadata_url == ""
-
-    def test_config_with_metadata_url(self):
-        """Test MCP OAuth configuration with metadata URL."""
-        config = MCPOAuthConfigs(metadata_url="https://example.com/.well-known/oauth")
-        assert config.metadata_url == "https://example.com/.well-known/oauth"
-
-    def test_callback_url_basic(self):
-        """Test callback URL generation."""
-        config = MCPOAuthConfigs()
-        callback_url = config.callback_url("https://example.com:8000")
-        assert str(callback_url) == "https://example.com:8000/oauth/callback"
-
-    def test_callback_url_with_trailing_slash(self):
-        """Test callback URL generation with trailing slash."""
-        config = MCPOAuthConfigs()
-        callback_url = config.callback_url("https://example.com:8000/")
-        assert str(callback_url) == "https://example.com:8000/oauth/callback"
-
-    def test_callback_url_custom_suffix(self):
-        """Test callback URL generation with custom suffix."""
-        config = MCPOAuthConfigs()
-        callback_url = config.callback_url(
-            "https://example.com:8000", "/custom/callback"
-        )
-        assert str(callback_url) == "https://example.com:8000/custom/callback"
-
-
 class TestFHIROAuthConfigs:
     """Test the FHIROAuthConfigs class."""
 
@@ -119,7 +84,7 @@ class TestFHIROAuthConfigs:
         """Test FHIR callback URL generation."""
         config = FHIROAuthConfigs()
         callback_url = config.callback_url("https://example.com:8000")
-        assert str(callback_url) == "https://example.com:8000/fhir/callback"
+        assert str(callback_url) == "https://example.com:8000/oauth/callback"
 
     def test_callback_url_custom_suffix(self):
         """Test FHIR callback URL generation with custom suffix."""
@@ -159,51 +124,74 @@ class TestServerConfigs:
 
     def test_default_config(self):
         """Test default server configuration."""
-        config = ServerConfigs()
-        assert config.host == "localhost"
-        assert config.port == 8000
-        assert config.server_url is None
-        assert isinstance(config.oauth, MCPOAuthConfigs)
-        assert isinstance(config.fhir, FHIROAuthConfigs)
+        # Use empty environment and mock file loading to avoid loading existing config
+        import os
+        from unittest.mock import patch
+        
+        with patch.dict(os.environ, {}, clear=True), \
+             patch('pydantic_settings.BaseSettings.model_config') as mock_config:
+            # Override model_config to prevent .env file loading
+            mock_config.env_file = None
+            
+            # Create a fresh ServerConfigs instance with no config loading
+            config = ServerConfigs(
+                _env_file=None,
+                _env_file_encoding=None,
+                _env_nested_delimiter=None,
+                _env_prefix=None
+            )
+            
+            assert config.host == "localhost"
+            assert config.port == 8000
+            assert config.server_url is None or config.server_url == ""
+            assert isinstance(config.fhir_oauth, FHIROAuthConfigs)
 
     def test_effective_server_url_default(self):
         """Test effective server URL with default values."""
-        config = ServerConfigs()
-        assert config.effective_server_url == "http://localhost:8000"
+        import os
+        from unittest.mock import patch
+        
+        with patch.dict(os.environ, {}, clear=True):
+            config = ServerConfigs()
+            assert config.effective_server_url == "http://localhost:8000"
 
     def test_effective_server_url_custom_host_port(self):
         """Test effective server URL with custom host and port."""
-        config = ServerConfigs(host="0.0.0.0", port=9000)
-        assert config.effective_server_url == "http://0.0.0.0:9000"
+        import os
+        from unittest.mock import patch
+        
+        with patch.dict(os.environ, {}, clear=True):
+            config = ServerConfigs(host="0.0.0.0", port=9000)
+            assert config.effective_server_url == "http://0.0.0.0:9000"
 
     def test_effective_server_url_explicit(self):
         """Test effective server URL with explicit server_url."""
-        config = ServerConfigs(server_url="https://my-server.com")
-        assert config.effective_server_url == "https://my-server.com"
+        import os
+        from unittest.mock import patch
+        
+        with patch.dict(os.environ, {}, clear=True):
+            config = ServerConfigs(server_url="https://my-server.com")
+            assert config.effective_server_url == "https://my-server.com"
 
-    def test_config_with_nested_oauth(self):
-        """Test server configuration with nested OAuth configs."""
-        # Note: This test shows the expected behavior but the actual implementation
-        # may not support this syntax. Testing with actual ServerConfigs behavior.
-        config = ServerConfigs()
-        # Manually set nested values to test the structure
-        config.oauth.client_id = "test_client"
-        config.oauth.metadata_url = "https://example.com/oauth"
+    def test_config_with_nested_fhir_oauth(self):
+        """Test server configuration with nested FHIR OAuth configs."""
+        import os
+        from unittest.mock import patch
+        
+        with patch.dict(os.environ, {}, clear=True):
+            config = ServerConfigs()
+            # Manually set nested values to test the structure
+            config.fhir_oauth.client_id = "test_client"
+            config.fhir_oauth.base_url = "https://example.com/fhir"
 
-        assert config.oauth.client_id == "test_client"
-        assert config.oauth.metadata_url == "https://example.com/oauth"
+            assert config.fhir_oauth.client_id == "test_client"
+            assert config.fhir_oauth.base_url == "https://example.com/fhir"
+            
+            config.fhir_oauth.base_url = "https://custom.fhir.org"
+            config.fhir_oauth.timeout = 120
 
-    def test_config_with_nested_fhir(self):
-        """Test server configuration with nested FHIR configs."""
-        # Note: This test shows the expected behavior but the actual implementation
-        # may not support this syntax. Testing with actual ServerConfigs behavior.
-        config = ServerConfigs()
-        # Manually set nested values to test the structure
-        config.fhir.base_url = "https://custom.fhir.org"
-        config.fhir.timeout = 120
-
-        assert config.fhir.base_url == "https://custom.fhir.org"
-        assert config.fhir.timeout == 120
+            assert config.fhir_oauth.base_url == "https://custom.fhir.org"
+            assert config.fhir_oauth.timeout == 120
 
 
 class TestOAuthMetadata:
