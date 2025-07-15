@@ -100,10 +100,10 @@ class OAuthServerProvider(OAuthAuthorizationServerProvider):
 
         auth_params: Dict[str, str] = {
             "response_type": "code",
-            "scope": self.configs.oauth.scope,
-            "client_id": self.configs.oauth.client_id,
+            "scope": self.configs.fhir_oauth.scope,
+            "client_id": self.configs.fhir_oauth.client_id,
             "redirect_uri": str(
-                self.configs.oauth.callback_url(self.configs.effective_server_url)
+                self.configs.fhir_oauth.callback_url(self.configs.effective_server_url)
             ),
             "state": state,
             "code_challenge": code_challenge,
@@ -173,9 +173,9 @@ class OAuthServerProvider(OAuthAuthorizationServerProvider):
             "grant_type": "authorization_code",
             "code": authorization_code.code,
             "code_verifier": authorization_code.code_verifier,
-            "client_id": self.configs.oauth.client_id,
-            "client_secret": self.configs.oauth.client_secret,
-            "redirect_uri": self.configs.oauth.callback_url(self.configs.effective_server_url),
+            "client_id": self.configs.fhir_oauth.client_id,
+            "client_secret": self.configs.fhir_oauth.client_secret,
+            "redirect_uri": self.configs.fhir_oauth.callback_url(self.configs.effective_server_url),
         }
 
         token: OAuth2Token = await perform_token_flow(
@@ -190,7 +190,7 @@ class OAuthServerProvider(OAuthAuthorizationServerProvider):
 
         self.token_mapping[mcp_access_token] = AccessToken(
             token=token.access_token,
-            client_id=self.configs.oauth.client_id,
+            client_id=self.configs.fhir_oauth.client_id,
             scopes=token.scopes,
             expires_at=int(token.expires_at or 3600),
         )
@@ -198,7 +198,7 @@ class OAuthServerProvider(OAuthAuthorizationServerProvider):
         if token.refresh_token:
             self.token_mapping[mcp_refresh_token] = RefreshToken(
                 token=token.refresh_token,
-                client_id=self.configs.oauth.client_id,
+                client_id=self.configs.fhir_oauth.client_id,
                 scopes=token.scopes,
                 expires_at=int(token.expires_at or 3600),
             )
@@ -251,8 +251,8 @@ class OAuthServerProvider(OAuthAuthorizationServerProvider):
         refresh_token_payload: Dict = {
             "grant_type": "refresh_token",
             "refresh_token": refresh_token,
-            "client_id": self.configs.oauth.client_id,
-            "client_secret": self.configs.oauth.client_secret,
+            "client_id": self.configs.fhir_oauth.client_id,
+            "client_secret": self.configs.fhir_oauth.client_secret,
             "scopes": " ".join(scopes),
         }
         new_token: OAuth2Token = await perform_token_flow(
@@ -298,7 +298,7 @@ class OAuthServerProvider(OAuthAuthorizationServerProvider):
     async def _discover_oauth_metadata(self) -> OAuthMetadata | None:
 
         return await discover_oauth_metadata(
-            metadata_url=self.configs.oauth.metadata_url,
+            metadata_url=self.configs.fhir_oauth.discovery_url,
             headers={"Accept": "application/json"},
         )
 

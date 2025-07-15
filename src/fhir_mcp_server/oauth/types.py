@@ -30,23 +30,13 @@ class BaseOAuthConfigs(BaseSettings):
             return [scope.strip() for scope in self.scope.split(" ") if scope.strip()]
         return [self.scope]
 
-
-class MCPOAuthConfigs(BaseOAuthConfigs):
-    metadata_url: str = ""
-
-    def callback_url(
-        self, server_url: str, suffix: str = "/oauth/callback"
-    ) -> AnyHttpUrl:
-        return AnyHttpUrl(f"{server_url.rstrip('/')}{suffix}")
-
-
 class FHIROAuthConfigs(BaseOAuthConfigs):
     base_url: str = ""
     timeout: int = 30  # in secs
     access_token: str | None = None
 
     def callback_url(
-        self, server_url: str, suffix: str = "/fhir/callback"
+        self, server_url: str, suffix: str = "/oauth/callback"
     ) -> AnyHttpUrl:
         return AnyHttpUrl(f"{server_url.rstrip('/')}{suffix}")
 
@@ -74,10 +64,8 @@ class ServerConfigs(BaseSettings):
     host: str = "localhost"
     port: int = 8000
     server_url: str | None = None
-    # OAuth2 settings
-    oauth: MCPOAuthConfigs = MCPOAuthConfigs()
-    # FHIR settings
-    fhir: FHIROAuthConfigs = FHIROAuthConfigs()
+    # OAuth with FHIR settings
+    fhir_oauth: FHIROAuthConfigs = FHIROAuthConfigs()
 
     @property
     def effective_server_url(self) -> str:
