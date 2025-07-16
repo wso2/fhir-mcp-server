@@ -16,10 +16,9 @@
 
 from .common import handle_successful_authentication, handle_failed_authentication
 from .server_provider import OAuthServerProvider
-from .types import FHIROAuthConfigs, ServerConfigs, OAuthToken
+from .types import ServerConfigs, OAuthToken
 
 __all__ = [
-    "FHIROAuthConfigs",
     "handle_successful_authentication",
     "handle_failed_authentication",
     "OAuthServerProvider",

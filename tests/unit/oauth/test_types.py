@@ -128,23 +128,18 @@ class TestServerConfigs:
         import os
         from unittest.mock import patch
         
-        with patch.dict(os.environ, {}, clear=True), \
-             patch('pydantic_settings.BaseSettings.model_config') as mock_config:
-            # Override model_config to prevent .env file loading
-            mock_config.env_file = None
-            
-            # Create a fresh ServerConfigs instance with no config loading
-            config = ServerConfigs(
-                _env_file=None,
-                _env_file_encoding=None,
-                _env_nested_delimiter=None,
-                _env_prefix=None
-            )
+        with patch.dict(os.environ, {}, clear=True):
+            config = ServerConfigs(_env_file=None)
             
             assert config.host == "localhost"
             assert config.port == 8000
-            assert config.server_url is None or config.server_url == ""
-            assert isinstance(config.fhir_oauth, FHIROAuthConfigs)
+            assert config.server_url is None
+            assert config.client_id == ""
+            assert config.client_secret == ""
+            assert config.scope == ""
+            assert config.base_url == ""
+            assert config.request_timeout == 30
+            assert config.access_token is None
 
     def test_effective_server_url_default(self):
         """Test effective server URL with default values."""
@@ -152,7 +147,7 @@ class TestServerConfigs:
         from unittest.mock import patch
         
         with patch.dict(os.environ, {}, clear=True):
-            config = ServerConfigs()
+            config = ServerConfigs(_env_file=None)
             assert config.effective_server_url == "http://localhost:8000"
 
     def test_effective_server_url_custom_host_port(self):
@@ -161,7 +156,7 @@ class TestServerConfigs:
         from unittest.mock import patch
         
         with patch.dict(os.environ, {}, clear=True):
-            config = ServerConfigs(host="0.0.0.0", port=9000)
+            config = ServerConfigs(host="0.0.0.0", port=9000, _env_file=None)
             assert config.effective_server_url == "http://0.0.0.0:9000"
 
     def test_effective_server_url_explicit(self):
@@ -170,28 +165,28 @@ class TestServerConfigs:
         from unittest.mock import patch
         
         with patch.dict(os.environ, {}, clear=True):
-            config = ServerConfigs(server_url="https://my-server.com")
+            config = ServerConfigs(server_url="https://my-server.com", _env_file=None)
             assert config.effective_server_url == "https://my-server.com"
 
-    def test_config_with_nested_fhir_oauth(self):
-        """Test server configuration with nested FHIR OAuth configs."""
+    def test_config_with_fhir_oauth_values(self):
+        """Test server configuration with FHIR OAuth config values."""
         import os
         from unittest.mock import patch
         
         with patch.dict(os.environ, {}, clear=True):
-            config = ServerConfigs()
-            # Manually set nested values to test the structure
-            config.fhir_oauth.client_id = "test_client"
-            config.fhir_oauth.base_url = "https://example.com/fhir"
+            config = ServerConfigs(_env_file=None)
+            # Manually set FHIR OAuth values to test the structure
+            config.client_id = "test_client"
+            config.base_url = "https://example.com/fhir"
 
-            assert config.fhir_oauth.client_id == "test_client"
-            assert config.fhir_oauth.base_url == "https://example.com/fhir"
+            assert config.client_id == "test_client"
+            assert config.base_url == "https://example.com/fhir"
             
-            config.fhir_oauth.base_url = "https://custom.fhir.org"
-            config.fhir_oauth.timeout = 120
+            config.base_url = "https://custom.fhir.org"
+            config.request_timeout = 120
 
-            assert config.fhir_oauth.base_url == "https://custom.fhir.org"
-            assert config.fhir_oauth.timeout == 120
+            assert config.base_url == "https://custom.fhir.org"
+            assert config.request_timeout == 120
 
 
 class TestOAuthMetadata:

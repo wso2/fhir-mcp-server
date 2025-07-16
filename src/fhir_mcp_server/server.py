@@ -41,7 +41,7 @@ from typing import Dict, Any, List
 from typing_extensions import Annotated
 from pydantic import AnyHttpUrl, Field
 from starlette.requests import Request
-from starlette.responses import RedirectResponse, Response, HTMLResponse
+from starlette.responses import RedirectResponse, Response
 from mcp.server.auth.middleware.auth_context import get_access_token
 from mcp.server.auth.provider import AccessToken
 from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions
@@ -60,9 +60,9 @@ async def get_user_access_token(click_ctx: click.Context) -> OAuthToken | None:
     Retrieve the access token for the authenticated user.
     Returns an OAuthToken if available, otherwise raises an error.
     """
-    if configs.fhir_oauth.access_token:
+    if configs.access_token:
         logger.debug("Using configured FHIR access token for user.")
-        return OAuthToken(access_token=configs.fhir_oauth.access_token, token_type="Bearer")
+        return OAuthToken(access_token=configs.access_token, token_type="Bearer")
 
     disable_auth: bool = (
         click_ctx.obj.get("disable_auth") if click_ctx.obj else False
@@ -87,7 +87,7 @@ async def get_async_fhir_client(click_ctx: click.Context) -> AsyncFHIRClient:
     Returns an AsyncFHIRClient instance.
     """
     client_kwargs: Dict = {
-        "config": configs.fhir_oauth,
+        "config": configs,
         "extra_headers": get_default_headers(),
     }
 
@@ -125,8 +125,8 @@ def configure_mcp_server(disable_auth: bool) -> FastMCP:
             issuer_url=AnyHttpUrl(configs.effective_server_url),
             client_registration_options=ClientRegistrationOptions(
                 enabled=True,
-                valid_scopes=configs.fhir_oauth.scopes,
-                default_scopes=configs.fhir_oauth.scopes,
+                valid_scopes=configs.scopes_,
+                default_scopes=configs.scopes_,
             ),
         )
         fastmcp_kwargs["auth_server_provider"] = server_provider
@@ -144,15 +144,6 @@ def register_mcp_routes(
     Register custom routes for the FastMCP server instance.
     """
     logger.debug("Registering custom MCP routes.")
-
-    @mcp.custom_route("/fhir/callback", methods=["GET"])
-    async def handle_fhir_server_callback(request: Request) -> HTMLResponse:
-        """Handle FHIR OAuth redirect."""
-        code: str | None = request.query_params.get("code")
-        state: str | None = request.query_params.get("state")
-
-        if not code or not state:
-            return handle_failed_authentication("Missing code or state parameter")
 
     @mcp.custom_route("/oauth/callback", methods=["GET"])
     async def handle_auth_server_callback(request: Request) -> Response:
@@ -220,7 +211,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
         try:
             logger.debug(f"Invoked with resource_type='{type}'")
             data: Dict[str, Any] = await get_capability_statement(
-                configs.fhir_oauth.metadata_url
+                configs.metadata_url
             )
             for resource in data["rest"][0]["resource"]:
                 if resource.get("type") == type:

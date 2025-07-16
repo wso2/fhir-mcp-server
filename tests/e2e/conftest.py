@@ -39,9 +39,9 @@ async def mcp_server() -> AsyncGenerator[bool, Any]:
     env["PYTHONPATH"] = os.path.abspath(
         os.path.join(os.path.dirname(__file__), "..", "..", "src")
     )
-    env["HEALTHCARE_MCP_FHIR_OAUTH__BASE_URL"] = "https://hapi.fhir.org/baseR4"
-    env["HEALTHCARE_MCP_HOST"] = "localhost"
-    env["HEALTHCARE_MCP_PORT"] = "8001"
+    env["FHIR_MCP_BASE_URL"] = "https://hapi.fhir.org/baseR4"
+    env["FHIR_MCP_HOST"] = "localhost"
+    env["FHIR_MCP_PORT"] = "8001"
 
     logger.info("Starting MCP server with: uv run fhir-mcp-server --disable-auth")
     process = subprocess.Popen(

@@ -18,21 +18,27 @@ from pydantic import AnyHttpUrl, BaseModel
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class BaseOAuthConfigs(BaseSettings):
+class ServerConfigs(BaseSettings):
+    """Contains environment configurations of the MCP server."""
+
+    model_config = SettingsConfigDict(
+        env_prefix="FHIR_MCP_",
+        env_file=".env",
+        env_file_encoding="utf-8",
+        env_nested_delimiter="__",
+        extra="ignore",
+    )
+
+    # Server settings
+    host: str = "localhost"
+    port: int = 8000
+    server_url: str | None = None
+    # FHIR settings
     client_id: str = ""
     client_secret: str = ""
-    scope: str = ""
-
-    @property
-    def scopes(self) -> list[str]:
-        # If the raw value is a string, split on empty spaces
-        if isinstance(self.scope, str):
-            return [scope.strip() for scope in self.scope.split(" ") if scope.strip()]
-        return [self.scope]
-
-class FHIROAuthConfigs(BaseOAuthConfigs):
+    scopes: str = ""
     base_url: str = ""
-    timeout: int = 30  # in secs
+    request_timeout: int = 30  # in secs
     access_token: str | None = None
 
     def callback_url(
@@ -48,24 +54,12 @@ class FHIROAuthConfigs(BaseOAuthConfigs):
     def metadata_url(self) -> str:
         return f"{self.base_url.rstrip('/')}/metadata?_format=json"
 
-
-class ServerConfigs(BaseSettings):
-    """Contains environment configurations of the MCP server."""
-
-    model_config = SettingsConfigDict(
-        env_prefix="HEALTHCARE_MCP_",
-        env_file=".env",
-        env_file_encoding="utf-8",
-        env_nested_delimiter="__",
-        extra="ignore",
-    )
-
-    # Server settings
-    host: str = "localhost"
-    port: int = 8000
-    server_url: str | None = None
-    # OAuth with FHIR settings
-    fhir_oauth: FHIROAuthConfigs = FHIROAuthConfigs()
+    @property
+    def scopes_(self) -> list[str]:
+        # If the raw value is a string, split on empty spaces
+        if isinstance(self.scopes, str):
+            return [scope.strip() for scope in self.scopes.split(" ") if scope.strip()]
+        return [self.scopes]
 
     @property
     def effective_server_url(self) -> str:

@@ -39,8 +39,8 @@ class TestIntegration:
             )
             
             # Set the fhir_oauth config after initialization
-            config.fhir_oauth.base_url = "https://custom.fhir.org"
-            config.fhir_oauth.timeout = 60
+            config.base_url = "https://custom.fhir.org"
+            config.request_timeout = 60
             
             # Test that nested configuration works
             assert config.host == "0.0.0.0"
@@ -52,8 +52,8 @@ class TestIntegration:
             assert server_provider.configs == config
             
             # Test FHIR OAuth config integration
-            assert config.fhir_oauth.base_url == "https://custom.fhir.org"
-            assert config.fhir_oauth.timeout == 60
+            assert config.base_url == "https://custom.fhir.org"
+            assert config.request_timeout == 60
 
     def test_fhir_oauth_config_integration(self):
         """Test FHIR OAuth config integration with server config."""
@@ -65,17 +65,17 @@ class TestIntegration:
             server_config = ServerConfigs(_env_file=None)
             
             # Modify FHIR OAuth config using the new structure
-            server_config.fhir_oauth.client_id = "test_client"
-            server_config.fhir_oauth.client_secret = "test_secret" 
-            server_config.fhir_oauth.scope = "read write"
+            server_config.client_id = "test_client"
+            server_config.client_secret = "test_secret" 
+            server_config.scope = "read write"
             
             # Test that the config values are properly set
-            assert server_config.fhir_oauth.client_id == "test_client"
-            assert server_config.fhir_oauth.client_secret == "test_secret"
-            assert server_config.fhir_oauth.scopes == ["read", "write"]
+            assert server_config.client_id == "test_client"
+            assert server_config.client_secret == "test_secret"
+            assert server_config.scopes == ["read", "write"]
             
             # Test callback URL generation
-            callback_url = server_config.fhir_oauth.callback_url(server_config.effective_server_url)
+            callback_url = server_config.callback_url(server_config.effective_server_url)
             assert str(callback_url) == "http://localhost:8000/oauth/callback"
 
     @pytest.mark.asyncio
@@ -88,8 +88,8 @@ class TestIntegration:
         with patch.dict(os.environ, {}, clear=True):
             # Set up server config
             server_config = ServerConfigs(host="localhost", port=8080, _env_file=None)
-            server_config.fhir_oauth.client_id = "integration_test_client"
-            server_config.fhir_oauth.client_secret = "integration_test_secret"
+            server_config.client_id = "integration_test_client"
+            server_config.client_secret = "integration_test_secret"
             
             # Set up server provider
             server_provider = OAuthServerProvider(configs=server_config)
@@ -121,17 +121,17 @@ class TestIntegration:
             
             # Mock the FHIR config with test values to avoid external URLs
             mock_base_url = "https://mock.fhir.local/R4"
-            server_config.fhir_oauth.base_url = mock_base_url
+            server_config.base_url = mock_base_url
             
             # Test OAuth callback URL
-            oauth_callback = server_config.fhir_oauth.callback_url(server_config.effective_server_url)
+            oauth_callback = server_config.callback_url(server_config.effective_server_url)
             assert str(oauth_callback) == "https://api.example.com/oauth/callback"
             
             # Test FHIR discovery URL with mocked config
-            assert server_config.fhir_oauth.discovery_url == f"{mock_base_url}/.well-known/smart-configuration"
+            assert server_config.discovery_url == f"{mock_base_url}/.well-known/smart-configuration"
             
             # Test FHIR metadata URL with mocked config
-            assert server_config.fhir_oauth.metadata_url == f"{mock_base_url}/metadata?_format=json"
+            assert server_config.metadata_url == f"{mock_base_url}/metadata?_format=json"
 
     def test_provider_initialization_integration(self):
         """Test that server provider can be initialized with config."""
@@ -148,4 +148,4 @@ class TestIntegration:
             
             # Verify it uses the configuration
             assert server_provider.configs == config
-            assert server_provider.configs.fhir_oauth is not None
+            assert server_provider.configs is not None
