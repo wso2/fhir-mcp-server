@@ -39,7 +39,7 @@ async def mcp_server() -> AsyncGenerator[bool, Any]:
     env["PYTHONPATH"] = os.path.abspath(
         os.path.join(os.path.dirname(__file__), "..", "..", "src")
     )
-    env["FHIR_MCP_BASE_URL"] = "https://hapi.fhir.org/baseR4"
+    env["FHIR_SERVER_BASE_URL"] = "https://hapi.fhir.org/baseR4"
     env["FHIR_MCP_HOST"] = "localhost"
     env["FHIR_MCP_PORT"] = "8001"
 

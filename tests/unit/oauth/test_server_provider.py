@@ -30,14 +30,13 @@ class TestOAuthServerProvider:
     def setup_method(self):
         """Set up test fixtures."""
         self.mock_configs = ServerConfigs(
-            host="localhost", 
-            port=8000, 
-            server_url="http://localhost:8000",
-            client_id="test_client_id",
-            client_secret="test_client_secret",
-            base_url="https://auth.example.com",
-            scope="read write"
-
+            mcp_host="localhost", 
+            mcp_port=8000, 
+            mcp_server_url="http://localhost:8000",
+            server_client_id="test_client_id",
+            server_client_secret="test_client_secret",
+            server_base_url="https://auth.example.com",
+            server_scopes="read write"
         )
 
     @pytest.mark.asyncio

@@ -60,9 +60,9 @@ async def get_user_access_token(click_ctx: click.Context) -> OAuthToken | None:
     Retrieve the access token for the authenticated user.
     Returns an OAuthToken if available, otherwise raises an error.
     """
-    if configs.access_token:
+    if configs.server_access_token:
         logger.debug("Using configured FHIR access token for user.")
-        return OAuthToken(access_token=configs.access_token, token_type="Bearer")
+        return OAuthToken(access_token=configs.server_access_token, token_type="Bearer")
 
     disable_auth: bool = (
         click_ctx.obj.get("disable_auth") if click_ctx.obj else False
@@ -114,8 +114,8 @@ def configure_mcp_server(disable_auth: bool) -> FastMCP:
     fastmcp_kwargs: Dict = {
         "name": "FHIR MCP Server",
         "instructions": "This server implements the HL7 FHIR MCP for secure, standards-based access to FHIR resources",
-        "host": configs.host,
-        "port": configs.port,
+        "host": configs.mcp_host,
+        "port": configs.mcp_port,
         "json_response": True,
         "stateless_http": True,
     }

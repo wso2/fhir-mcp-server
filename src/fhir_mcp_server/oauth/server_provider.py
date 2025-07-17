@@ -100,8 +100,8 @@ class OAuthServerProvider(OAuthAuthorizationServerProvider):
 
         auth_params: Dict[str, str] = {
             "response_type": "code",
-            "scope": self.configs.scopes,
-            "client_id": self.configs.client_id,
+            "scope": self.configs.server_scopes,
+            "client_id": self.configs.server_client_id,
             "redirect_uri": str(
                 self.configs.callback_url(self.configs.effective_server_url)
             ),
@@ -173,8 +173,8 @@ class OAuthServerProvider(OAuthAuthorizationServerProvider):
             "grant_type": "authorization_code",
             "code": authorization_code.code,
             "code_verifier": authorization_code.code_verifier,
-            "client_id": self.configs.client_id,
-            "client_secret": self.configs.client_secret,
+            "client_id": self.configs.server_client_id,
+            "client_secret": self.configs.server_client_secret,
             "redirect_uri": self.configs.callback_url(self.configs.effective_server_url),
         }
 
@@ -190,17 +190,15 @@ class OAuthServerProvider(OAuthAuthorizationServerProvider):
 
         self.token_mapping[mcp_access_token] = AccessToken(
             token=token.access_token,
-            client_id=self.configs.client_id,
+            client_id=self.configs.server_client_id,
             scopes=token.scopes,
             expires_at=int(token.expires_at or 3600),
         )
 
-        logger.debug(f"Generated MCP access token: {mcp_access_token} for client {client.client_id} access token: {token.access_token}")
-
         if token.refresh_token:
             self.token_mapping[mcp_refresh_token] = RefreshToken(
                 token=token.refresh_token,
-                client_id=self.configs.client_id,
+                client_id=self.configs.server_client_id,
                 scopes=token.scopes,
                 expires_at=int(token.expires_at or 3600),
             )
@@ -253,8 +251,8 @@ class OAuthServerProvider(OAuthAuthorizationServerProvider):
         refresh_token_payload: Dict = {
             "grant_type": "refresh_token",
             "refresh_token": refresh_token,
-            "client_id": self.configs.client_id,
-            "client_secret": self.configs.client_secret,
+            "client_id": self.configs.server_client_id,
+            "client_secret": self.configs.server_client_secret,
             "scopes": " ".join(scopes),
         }
         new_token: OAuth2Token = await perform_token_flow(

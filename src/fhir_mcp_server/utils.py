@@ -34,9 +34,9 @@ async def create_async_fhir_client(
     """Create a FHIR AsyncClient with defaults."""
 
     client_kwargs: Dict = {
-        "url": config.base_url,
+        "url": config.server_base_url,
         "aiohttp_config": {
-            "timeout": aiohttp.ClientTimeout(total=config.request_timeout),
+            "timeout": aiohttp.ClientTimeout(total=config.server_request_timeout),
         },
         "extra_headers": extra_headers,
     }

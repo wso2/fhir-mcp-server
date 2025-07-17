@@ -14,7 +14,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from pydantic import AnyHttpUrl
+import os
 import pytest
 from unittest.mock import patch, Mock
 
@@ -27,52 +27,48 @@ class TestIntegration:
 
     def test_server_configs_integration(self):
         """Test that server configurations work with providers."""
-        import os
-        from unittest.mock import patch
         
         # Clear environment variables and disable .env file loading
         with patch.dict(os.environ, {}, clear=True):
             config = ServerConfigs(
-                host="0.0.0.0",
-                port=9000,
+                mcp_host="0.0.0.0",
+                mcp_port=9000,
                 _env_file=None
             )
             
-            # Set the fhir_oauth config after initialization
-            config.base_url = "https://custom.fhir.org"
-            config.request_timeout = 60
+            # Set the server config after initialization
+            config.server_base_url = "https://custom.fhir.org"
+            config.server_request_timeout = 60
             
             # Test that nested configuration works
-            assert config.host == "0.0.0.0"
-            assert config.port == 9000
+            assert config.mcp_host == "0.0.0.0"
+            assert config.mcp_port == 9000
             assert config.effective_server_url == "http://0.0.0.0:9000"
             
             # Test that providers can be initialized with the config
             server_provider = OAuthServerProvider(configs=config)
             assert server_provider.configs == config
             
-            # Test FHIR OAuth config integration
-            assert config.base_url == "https://custom.fhir.org"
-            assert config.request_timeout == 60
+            # Test server config integration
+            assert config.server_base_url == "https://custom.fhir.org"
+            assert config.server_request_timeout == 60
 
     def test_fhir_oauth_config_integration(self):
         """Test FHIR OAuth config integration with server config."""
-        import os
-        from unittest.mock import patch
         
         # Clear environment variables and disable .env file loading
         with patch.dict(os.environ, {}, clear=True):
             server_config = ServerConfigs(_env_file=None)
             
-            # Modify FHIR OAuth config using the new structure
-            server_config.client_id = "test_client"
-            server_config.client_secret = "test_secret" 
-            server_config.scope = "read write"
+            # Modify server config using the new structure
+            server_config.server_client_id = "test_client"
+            server_config.server_client_secret = "test_secret" 
+            server_config.server_scopes = "read write"
             
             # Test that the config values are properly set
-            assert server_config.client_id == "test_client"
-            assert server_config.client_secret == "test_secret"
-            assert server_config.scopes == ["read", "write"]
+            assert server_config.server_client_id == "test_client"
+            assert server_config.server_client_secret == "test_secret"
+            assert server_config.scopes_ == ["read", "write"]
             
             # Test callback URL generation
             callback_url = server_config.callback_url(server_config.effective_server_url)
@@ -81,15 +77,13 @@ class TestIntegration:
     @pytest.mark.asyncio
     async def test_oauth_server_provider_integration(self):
         """Test OAuth server provider integration."""
-        import os
-        from unittest.mock import patch
         
         # Clear environment variables and disable .env file loading
         with patch.dict(os.environ, {}, clear=True):
             # Set up server config
-            server_config = ServerConfigs(host="localhost", port=8080, _env_file=None)
-            server_config.client_id = "integration_test_client"
-            server_config.client_secret = "integration_test_secret"
+            server_config = ServerConfigs(mcp_host="localhost", mcp_port=8080, _env_file=None)
+            server_config.server_client_id = "integration_test_client"
+            server_config.server_client_secret = "integration_test_secret"
             
             # Set up server provider
             server_provider = OAuthServerProvider(configs=server_config)
@@ -114,14 +108,14 @@ class TestIntegration:
         # Create ServerConfigs with mocked FHIR configuration
         with patch.dict('os.environ', {}, clear=True):  # Clear env vars to avoid external config
             server_config = ServerConfigs(
-                host="api.example.com",
-                port=443,
-                server_url="https://api.example.com"
+                mcp_host="api.example.com",
+                mcp_port=443,
+                mcp_server_url="https://api.example.com"
             )
             
-            # Mock the FHIR config with test values to avoid external URLs
+            # Mock the server config with test values to avoid external URLs
             mock_base_url = "https://mock.fhir.local/R4"
-            server_config.base_url = mock_base_url
+            server_config.server_base_url = mock_base_url
             
             # Test OAuth callback URL
             oauth_callback = server_config.callback_url(server_config.effective_server_url)
@@ -135,8 +129,6 @@ class TestIntegration:
 
     def test_provider_initialization_integration(self):
         """Test that server provider can be initialized with config."""
-        import os
-        from unittest.mock import patch
         
         # Clear environment variables and disable .env file loading
         with patch.dict(os.environ, {}, clear=True):

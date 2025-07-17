@@ -22,24 +22,24 @@ class ServerConfigs(BaseSettings):
     """Contains environment configurations of the MCP server."""
 
     model_config = SettingsConfigDict(
-        env_prefix="FHIR_MCP_",
+        env_prefix="FHIR_",
         env_file=".env",
         env_file_encoding="utf-8",
         env_nested_delimiter="__",
         extra="ignore",
     )
 
-    # Server settings
-    host: str = "localhost"
-    port: int = 8000
-    server_url: str | None = None
+    # MCP Server settings
+    mcp_host: str = "localhost"
+    mcp_port: int = 8000
+    mcp_server_url: str | None = None
     # FHIR settings
-    client_id: str = ""
-    client_secret: str = ""
-    scopes: str = ""
-    base_url: str = ""
-    request_timeout: int = 30  # in secs
-    access_token: str | None = None
+    server_client_id: str = ""
+    server_client_secret: str = ""
+    server_scopes: str = ""
+    server_base_url: str = ""
+    server_request_timeout: int = 30  # in secs
+    server_access_token: str | None = None
 
     def callback_url(
         self, server_url: str, suffix: str = "/oauth/callback"
@@ -48,22 +48,22 @@ class ServerConfigs(BaseSettings):
 
     @property
     def discovery_url(self) -> str:
-        return f"{self.base_url.rstrip('/')}/.well-known/smart-configuration"
+        return f"{self.server_base_url.rstrip('/')}/.well-known/smart-configuration"
 
     @property
     def metadata_url(self) -> str:
-        return f"{self.base_url.rstrip('/')}/metadata?_format=json"
+        return f"{self.server_base_url.rstrip('/')}/metadata?_format=json"
 
     @property
     def scopes_(self) -> list[str]:
         # If the raw value is a string, split on empty spaces
-        if isinstance(self.scopes, str):
-            return [scope.strip() for scope in self.scopes.split(" ") if scope.strip()]
-        return [self.scopes]
+        if isinstance(self.server_scopes, str):
+            return [scope.strip() for scope in self.server_scopes.split(" ") if scope.strip()]
+        return [self.server_scopes]
 
     @property
     def effective_server_url(self) -> str:
-        return self.server_url or f"http://{self.host}:{self.port}"
+        return self.mcp_server_url or f"http://{self.mcp_host}:{self.mcp_port}"
 
     def __init__(self, **data):
         """Initialize settings with values from environment variables"""

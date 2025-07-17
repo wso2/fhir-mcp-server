@@ -537,3 +537,86 @@ class TestPerformTokenFlow:
             result = await perform_token_flow(url, data)
 
             assert result.expires_at == 2003600  # 2000000 + 3600 (default)
+
+
+class TestDiscoverOAuthMetadataEdgeCases:
+    """Test edge cases for discover_oauth_metadata function."""
+
+    @pytest.mark.asyncio
+    async def test_discover_oauth_metadata_empty_response(self):
+        """Test OAuth metadata discovery with empty response."""
+        metadata_url = "https://example.com/.well-known/oauth"
+
+        with patch(
+            "fhir_mcp_server.oauth.common.create_mcp_http_client"
+        ) as mock_client_context:
+            mock_client = AsyncMock()
+            mock_response = Mock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = {}
+            mock_client.get.return_value = mock_response
+            mock_client_context.return_value.__aenter__.return_value = mock_client
+
+            with pytest.raises(Exception):  # Should fail validation
+                await discover_oauth_metadata(metadata_url)
+
+    @pytest.mark.asyncio
+    async def test_discover_oauth_metadata_malformed_urls(self):
+        """Test OAuth metadata discovery with malformed URLs in response."""
+        metadata_url = "https://example.com/.well-known/oauth"
+        metadata_response = {
+            "issuer": "not-a-valid-url",
+            "authorization_endpoint": "also-not-valid",
+            "token_endpoint": "https://example.com/token",
+            "response_types_supported": ["code"],
+        }
+
+        with patch(
+            "fhir_mcp_server.oauth.common.create_mcp_http_client"
+        ) as mock_client_context:
+            mock_client = AsyncMock()
+            mock_response = Mock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = metadata_response
+            mock_client.get.return_value = mock_response
+            mock_client_context.return_value.__aenter__.return_value = mock_client
+
+            with pytest.raises(Exception):  # Should fail validation
+                await discover_oauth_metadata(metadata_url)
+
+
+class TestTokenFlowEdgeCases:
+    """Test edge cases for token flow operations."""
+
+    @pytest.mark.asyncio
+    async def test_perform_token_flow_with_refresh_token_response(self):
+        """Test token flow with refresh token in response."""
+        url = "https://example.com/token"
+        data = {"grant_type": "authorization_code", "code": "test_code"}
+        token_response = {
+            "access_token": "test_access_token",
+            "token_type": "Bearer",
+            "expires_in": 3600,
+            "refresh_token": "test_refresh_token",
+            "scope": "read write"
+        }
+
+        with patch(
+            "fhir_mcp_server.oauth.common.create_mcp_http_client"
+        ) as mock_client_context:
+            mock_client = AsyncMock()
+            mock_response = Mock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = token_response
+            mock_client.post.return_value = mock_response
+            mock_client_context.return_value.__aenter__.return_value = mock_client
+
+            result = await perform_token_flow(url, data)
+
+            assert isinstance(result, OAuthToken)
+            assert result.access_token == "test_access_token"
+            assert result.token_type == "Bearer"
+            assert result.expires_in == 3600
+            assert result.refresh_token == "test_refresh_token"
+            assert result.scope == "read write"
+            assert result.expires_at is not None

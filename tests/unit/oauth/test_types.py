@@ -15,108 +15,15 @@
 # under the License.
 
 import pytest
+import os
+from unittest.mock import patch
 from pydantic import AnyHttpUrl, ValidationError
 from fhir_mcp_server.oauth.types import (
-    BaseOAuthConfigs,
-    FHIROAuthConfigs,
     ServerConfigs,
     OAuthMetadata,
     OAuthToken,
     AuthorizationCode,
 )
-
-
-class TestBaseOAuthConfigs:
-    """Test the BaseOAuthConfigs class."""
-
-    def test_basic_config(self):
-        """Test basic OAuth configuration."""
-        config = BaseOAuthConfigs()
-        assert config.client_id == ""
-        assert config.client_secret == ""
-        assert config.scope == ""
-
-    def test_config_with_values(self):
-        """Test OAuth configuration with values."""
-        config = BaseOAuthConfigs(
-            client_id="test_client", client_secret="test_secret", scope="read write"
-        )
-        assert config.client_id == "test_client"
-        assert config.client_secret == "test_secret"
-        assert config.scope == "read write"
-
-    def test_scopes_property_with_string(self):
-        """Test scopes property with string scope."""
-        config = BaseOAuthConfigs(scope="read write admin")
-        assert config.scopes == ["read", "write", "admin"]
-
-    def test_scopes_property_empty(self):
-        """Test scopes property with empty scope."""
-        config = BaseOAuthConfigs(scope="")
-        assert config.scopes == []
-
-    def test_scopes_property_with_extra_spaces(self):
-        """Test scopes property with extra spaces."""
-        config = BaseOAuthConfigs(scope="  read   write   admin  ")
-        assert config.scopes == ["read", "write", "admin"]
-
-
-class TestFHIROAuthConfigs:
-    """Test the FHIROAuthConfigs class."""
-
-    def test_default_config(self):
-        """Test default FHIR OAuth configuration."""
-        config = FHIROAuthConfigs()
-        assert config.base_url == ""
-        assert config.timeout == 30
-        assert config.access_token is None
-
-    def test_config_with_custom_values(self):
-        """Test FHIR OAuth configuration with custom values."""
-        config = FHIROAuthConfigs(
-            base_url="https://custom.fhir.org/R4", timeout=60, access_token="test_token"
-        )
-        assert config.base_url == "https://custom.fhir.org/R4"
-        assert config.timeout == 60
-        assert config.access_token == "test_token"
-
-    def test_callback_url_basic(self):
-        """Test FHIR callback URL generation."""
-        config = FHIROAuthConfigs()
-        callback_url = config.callback_url("https://example.com:8000")
-        assert str(callback_url) == "https://example.com:8000/oauth/callback"
-
-    def test_callback_url_custom_suffix(self):
-        """Test FHIR callback URL generation with custom suffix."""
-        config = FHIROAuthConfigs()
-        callback_url = config.callback_url("https://example.com:8000", "/custom/fhir")
-        assert str(callback_url) == "https://example.com:8000/custom/fhir"
-
-    def test_discovery_url_property(self):
-        """Test discovery URL property."""
-        config = FHIROAuthConfigs(base_url="https://custom.fhir.org/R4")
-        assert (
-            config.discovery_url
-            == "https://custom.fhir.org/R4/.well-known/smart-configuration"
-        )
-
-    def test_discovery_url_with_trailing_slash(self):
-        """Test discovery URL property with trailing slash."""
-        config = FHIROAuthConfigs(base_url="https://custom.fhir.org/R4/")
-        assert (
-            config.discovery_url
-            == "https://custom.fhir.org/R4/.well-known/smart-configuration"
-        )
-
-    def test_metadata_url_property(self):
-        """Test metadata URL property."""
-        config = FHIROAuthConfigs(base_url="https://custom.fhir.org/R4")
-        assert config.metadata_url == "https://custom.fhir.org/R4/metadata?_format=json"
-
-    def test_metadata_url_with_trailing_slash(self):
-        """Test metadata URL property with trailing slash."""
-        config = FHIROAuthConfigs(base_url="https://custom.fhir.org/R4/")
-        assert config.metadata_url == "https://custom.fhir.org/R4/metadata?_format=json"
 
 
 class TestServerConfigs:
@@ -125,68 +32,112 @@ class TestServerConfigs:
     def test_default_config(self):
         """Test default server configuration."""
         # Use empty environment and mock file loading to avoid loading existing config
-        import os
-        from unittest.mock import patch
-        
         with patch.dict(os.environ, {}, clear=True):
             config = ServerConfigs(_env_file=None)
             
-            assert config.host == "localhost"
-            assert config.port == 8000
-            assert config.server_url is None
-            assert config.client_id == ""
-            assert config.client_secret == ""
-            assert config.scope == ""
-            assert config.base_url == ""
-            assert config.request_timeout == 30
-            assert config.access_token is None
+            assert config.mcp_host == "localhost"
+            assert config.mcp_port == 8000
+            assert config.mcp_server_url is None
+            assert config.server_client_id == ""
+            assert config.server_client_secret == ""
+            assert config.server_scopes == ""
+            assert config.server_base_url == ""
+            assert config.server_request_timeout == 30
+            assert config.server_access_token is None
 
     def test_effective_server_url_default(self):
         """Test effective server URL with default values."""
-        import os
-        from unittest.mock import patch
-        
         with patch.dict(os.environ, {}, clear=True):
             config = ServerConfigs(_env_file=None)
             assert config.effective_server_url == "http://localhost:8000"
 
     def test_effective_server_url_custom_host_port(self):
         """Test effective server URL with custom host and port."""
-        import os
-        from unittest.mock import patch
-        
         with patch.dict(os.environ, {}, clear=True):
-            config = ServerConfigs(host="0.0.0.0", port=9000, _env_file=None)
+            config = ServerConfigs(mcp_host="0.0.0.0", mcp_port=9000, _env_file=None)
             assert config.effective_server_url == "http://0.0.0.0:9000"
 
     def test_effective_server_url_explicit(self):
         """Test effective server URL with explicit server_url."""
-        import os
-        from unittest.mock import patch
-        
         with patch.dict(os.environ, {}, clear=True):
-            config = ServerConfigs(server_url="https://my-server.com", _env_file=None)
+            config = ServerConfigs(mcp_server_url="https://my-server.com", _env_file=None)
             assert config.effective_server_url == "https://my-server.com"
 
-    def test_config_with_fhir_oauth_values(self):
-        """Test server configuration with FHIR OAuth config values."""
-        import os
-        from unittest.mock import patch
-        
+    def test_config_with_server_values(self):
+        """Test server configuration with server values."""
+        with patch.dict(os.environ, {}, clear=True):
+            config = ServerConfigs(
+                server_client_id="test_client",
+                server_base_url="https://example.com/fhir",
+                server_request_timeout=120,
+                _env_file=None
+            )
+
+            assert config.server_client_id == "test_client"
+            assert config.server_base_url == "https://example.com/fhir"
+            assert config.server_request_timeout == 120
+
+    def test_callback_url_basic(self):
+        """Test callback URL generation."""
         with patch.dict(os.environ, {}, clear=True):
             config = ServerConfigs(_env_file=None)
-            # Manually set FHIR OAuth values to test the structure
-            config.client_id = "test_client"
-            config.base_url = "https://example.com/fhir"
+            callback_url = config.callback_url("https://example.com:8000")
+            assert str(callback_url) == "https://example.com:8000/oauth/callback"
 
-            assert config.client_id == "test_client"
-            assert config.base_url == "https://example.com/fhir"
-            
-            config.base_url = "https://custom.fhir.org"
-            config.request_timeout = 120
+    def test_callback_url_custom_suffix(self):
+        """Test callback URL generation with custom suffix."""
+        with patch.dict(os.environ, {}, clear=True):
+            config = ServerConfigs(_env_file=None)
+            callback_url = config.callback_url("https://example.com:8000", "/custom/fhir")
+            assert str(callback_url) == "https://example.com:8000/custom/fhir"
 
-            assert config.base_url == "https://custom.fhir.org"
-            assert config.request_timeout == 120
+    def test_discovery_url_property(self):
+        """Test discovery URL property."""
+        with patch.dict(os.environ, {}, clear=True):
+            config = ServerConfigs(server_base_url="https://custom.fhir.org/R4", _env_file=None)
+            assert (
+                config.discovery_url
+                == "https://custom.fhir.org/R4/.well-known/smart-configuration"
+            )
+
+    def test_discovery_url_with_trailing_slash(self):
+        """Test discovery URL property with trailing slash."""
+        with patch.dict(os.environ, {}, clear=True):
+            config = ServerConfigs(server_base_url="https://custom.fhir.org/R4/", _env_file=None)
+            assert (
+                config.discovery_url
+                == "https://custom.fhir.org/R4/.well-known/smart-configuration"
+            )
+
+    def test_metadata_url_property(self):
+        """Test metadata URL property."""
+        with patch.dict(os.environ, {}, clear=True):
+            config = ServerConfigs(server_base_url="https://custom.fhir.org/R4", _env_file=None)
+            assert config.metadata_url == "https://custom.fhir.org/R4/metadata?_format=json"
+
+    def test_metadata_url_with_trailing_slash(self):
+        """Test metadata URL property with trailing slash."""
+        with patch.dict(os.environ, {}, clear=True):
+            config = ServerConfigs(server_base_url="https://custom.fhir.org/R4/", _env_file=None)
+            assert config.metadata_url == "https://custom.fhir.org/R4/metadata?_format=json"
+
+    def test_scopes_property_with_string(self):
+        """Test scopes property with string scope."""
+        with patch.dict(os.environ, {}, clear=True):
+            config = ServerConfigs(server_scopes="read write admin", _env_file=None)
+            assert config.scopes_ == ["read", "write", "admin"]
+
+    def test_scopes_property_empty(self):
+        """Test scopes property with empty scope."""
+        with patch.dict(os.environ, {}, clear=True):
+            config = ServerConfigs(server_scopes="", _env_file=None)
+            assert config.scopes_ == []
+
+    def test_scopes_property_with_extra_spaces(self):
+        """Test scopes property with extra spaces."""
+        with patch.dict(os.environ, {}, clear=True):
+            config = ServerConfigs(server_scopes="  read   write   admin  ", _env_file=None)
+            assert config.scopes_ == ["read", "write", "admin"]
 
 
 class TestOAuthMetadata:
