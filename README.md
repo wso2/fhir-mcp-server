@@ -80,42 +80,30 @@ You can customize the behavior of the MCP server using the following command-lin
     - Accepted values: DEBUG, INFO, WARN, ERROR (case-insensitive)
     - Default: INFO
 
-- **--disable-mcp-auth**
-    - Description: Disables OAuth2-based authentication between the MCP client (e.g., Claude Desktop or VSCode) and the MCP server.
-    - Type: Flag (no value required)
-    - Default: False (authentication enabled)
-
-- **--disable-fhir-auth**
-    - Description: Disables OAuth2-based authentication between the MCP server and the FHIR server.
+- **--disable-auth**
+    - Description: Disables the security of the MCP Server. Allows you to connect with openly available FHIR servers.
     - Type: Flag (no value required)
     - Default: False (authentication enabled)
 
 Sample Usages:
 
 ```shell
-uv run fhir-mcp-server --transport streamable-http --log-level DEBUG --disable-mcp-auth --disable-fhir-auth
+uv run fhir-mcp-server --transport streamable-http --log-level DEBUG --disable-auth
 ```
 
 ### Environment Variables
 
 **MCP Server Configurations:**
-- `HEALTHCARE_MCP_HOST`: The hostname or IP address the MCP server should bind to (e.g., 0.0.0.0 for all interfaces, or localhost for local-only access).
-- `HEALTHCARE_MCP_PORT`: The port on which the MCP server will listen for incoming client requests (e.g., 8000).
+- `FHIR_MCP_HOST`: The hostname or IP address the MCP server should bind to (e.g., `localhost` for local-only access, or `0.0.0.0` for all interfaces).
+- `FHIR_MCP_PORT`: The port on which the MCP server will listen for incoming client requests (e.g., `8000`).
 
-**MCP Server OAuth2 Configuration (MCP Client ↔ MCP Server):**
-These variables are used when securing communication between an MCP client (like Claude Desktop or VSCode) and the MCP server via OAuth2 Authorization Code Grant flow.
+**MCP Server OAuth2 with FHIR server Configuration (MCP Client ↔ MCP Server):**
+These variables configure the MCP client's secure connection to the MCP server, using the OAuth2 authorization code grant flow with a FHIR server.
 
-- `HEALTHCARE_MCP_OAUTH__CLIENT_ID`: The OAuth2 client ID registered with your Identity Provider to authenticate MCP clients.
-- `HEALTHCARE_MCP_OAUTH__CLIENT_SECRET`: The OAuth2 client secret used to verify the MCP client during the token exchange process.
-- `HEALTHCARE_MCP_OAUTH__METADATA_URL`: The URL to the Identity Provider’s OAuth2 discovery document (usually ending in .well-known/openid-configuration). Used to dynamically fetch token and authorization endpoints.
-
-**FHIR Backend Configuration (MCP Server ↔ FHIR Server):**
-These variables configure the MCP server’s secure connection with the FHIR backend using authorization code grant flow.
-
-- `HEALTHCARE_MCP_FHIR__CLIENT_ID`: The OAuth2 client ID used by the MCP server to authenticate itself to the FHIR server.
-- `HEALTHCARE_MCP_FHIR__CLIENT_SECRET`: The client secret corresponding to the FHIR client ID. Used during token exchange.
-- `HEALTHCARE_MCP_FHIR__BASE_URL`: The base URL of the FHIR server (e.g., https://hapi.fhir.org/baseR4). This is used to generate tool URIs and to route FHIR requests.
-- `HEALTHCARE_MCP_FHIR__SCOPE`: A space-separated list of OAuth2 scopes to request from the FHIR authorization server (e.g., user/Patient.read user/Observation.read). 
+- `FHIR_SERVER_CLIENT_ID`: The OAuth2 client ID used to authorize MCP clients with the FHIR server.
+- `FHIR_SERVER_CLIENT_SECRET`: The client secret corresponding to the FHIR client ID. Used during token exchange.
+- `FHIR_SERVER_BASE_URL`: The base URL of the FHIR server (e.g., `https://hapi.fhir.org/baseR4`). This is used to generate tool URIs and to route FHIR requests.
+- `FHIR_SERVER_SCOPES`: A space-separated list of OAuth2 scopes to request from the FHIR authorization server (e.g., `user/Patient.read user/Observation.read`).
 
 
 ## Usage

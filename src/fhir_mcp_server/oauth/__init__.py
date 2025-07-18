@@ -14,14 +14,11 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from .client_provider import FHIRClientProvider
 from .common import handle_successful_authentication, handle_failed_authentication
 from .server_provider import OAuthServerProvider
-from .types import FHIROAuthConfigs, ServerConfigs, OAuthToken
+from .types import ServerConfigs, OAuthToken
 
 __all__ = [
-    "FHIRClientProvider",
-    "FHIROAuthConfigs",
     "handle_successful_authentication",
     "handle_failed_authentication",
     "OAuthServerProvider",

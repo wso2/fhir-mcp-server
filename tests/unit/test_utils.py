@@ -29,7 +29,7 @@ from fhir_mcp_server.utils import (
     get_capability_statement,
     get_default_headers,
 )
-from fhir_mcp_server.oauth.types import FHIROAuthConfigs
+from fhir_mcp_server.oauth.types import ServerConfigs
 
 
 class TestCreateAsyncFhirClient:
@@ -38,7 +38,7 @@ class TestCreateAsyncFhirClient:
     @pytest.mark.asyncio
     async def test_create_client_basic_config(self):
         """Test creating FHIR client with basic configuration."""
-        config = FHIROAuthConfigs(base_url="https://example.fhir.org/R4")
+        config = ServerConfigs(server_base_url="https://example.fhir.org/R4")
         
         with patch('fhir_mcp_server.utils.AsyncFHIRClient') as mock_client:
             # Create the client
@@ -57,7 +57,7 @@ class TestCreateAsyncFhirClient:
     @pytest.mark.asyncio
     async def test_create_client_with_access_token(self):
         """Test creating FHIR client with access token."""
-        config = FHIROAuthConfigs(base_url="https://example.fhir.org/R4")
+        config = ServerConfigs(server_base_url="https://example.fhir.org/R4")
         access_token = "test_token_123"
         
         with patch('fhir_mcp_server.utils.AsyncFHIRClient') as mock_client:
@@ -69,7 +69,7 @@ class TestCreateAsyncFhirClient:
     @pytest.mark.asyncio
     async def test_create_client_with_extra_headers(self):
         """Test creating FHIR client with extra headers."""
-        config = FHIROAuthConfigs(base_url="https://example.fhir.org/R4")
+        config = ServerConfigs(server_base_url="https://example.fhir.org/R4")
         extra_headers = {"X-Custom": "value", "User-Agent": "test"}
         
         with patch('fhir_mcp_server.utils.AsyncFHIRClient') as mock_client:
@@ -81,7 +81,7 @@ class TestCreateAsyncFhirClient:
     @pytest.mark.asyncio
     async def test_create_client_with_custom_timeout(self):
         """Test creating FHIR client with custom timeout."""
-        config = FHIROAuthConfigs(base_url="https://example.fhir.org/R4", timeout=60)
+        config = ServerConfigs(server_base_url="https://example.fhir.org/R4", server_request_timeout=60)
         
         with patch('fhir_mcp_server.utils.AsyncFHIRClient') as mock_client, \
              patch('fhir_mcp_server.utils.aiohttp.ClientTimeout') as mock_timeout:

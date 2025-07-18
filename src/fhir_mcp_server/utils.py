@@ -17,7 +17,7 @@
 import aiohttp
 import logging
 
-from fhir_mcp_server.oauth import FHIROAuthConfigs
+from fhir_mcp_server.oauth import ServerConfigs
 
 from typing import Any, Dict, List, Optional
 from fhirpy import AsyncFHIRClient
@@ -27,16 +27,16 @@ logger: logging.Logger = logging.getLogger(__name__)
 
 
 async def create_async_fhir_client(
-    config: FHIROAuthConfigs,
+    config: ServerConfigs,
     access_token: str | None = None,
     extra_headers: dict | None = None,
 ) -> AsyncFHIRClient:
     """Create a FHIR AsyncClient with defaults."""
 
     client_kwargs: Dict = {
-        "url": config.base_url,
+        "url": config.server_base_url,
         "aiohttp_config": {
-            "timeout": aiohttp.ClientTimeout(total=config.timeout),
+            "timeout": aiohttp.ClientTimeout(total=config.server_request_timeout),
         },
         "extra_headers": extra_headers,
     }

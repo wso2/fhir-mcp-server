@@ -29,9 +29,7 @@ from fhir_mcp_server.utils import (
 )
 from fhir_mcp_server.oauth import (
     handle_failed_authentication,
-    handle_successful_authentication,
     OAuthServerProvider,
-    FHIRClientProvider,
     OAuthToken,
     ServerConfigs,
 )
@@ -43,7 +41,7 @@ from typing import Dict, Any, List
 from typing_extensions import Annotated
 from pydantic import AnyHttpUrl, Field
 from starlette.requests import Request
-from starlette.responses import RedirectResponse, Response, HTMLResponse
+from starlette.responses import RedirectResponse, Response
 from mcp.server.auth.middleware.auth_context import get_access_token
 from mcp.server.auth.provider import AccessToken
 from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions
@@ -55,11 +53,6 @@ configs: ServerConfigs = ServerConfigs()
 
 server_provider: OAuthServerProvider = OAuthServerProvider(configs=configs)
 
-client_provider: FHIRClientProvider = FHIRClientProvider(
-    callback_url=AnyHttpUrl(configs.fhir.callback_url(configs.effective_server_url)),
-    configs=configs.fhir,
-)
-
 
 @click.pass_context
 async def get_user_access_token(click_ctx: click.Context) -> OAuthToken | None:
@@ -67,23 +60,19 @@ async def get_user_access_token(click_ctx: click.Context) -> OAuthToken | None:
     Retrieve the access token for the authenticated user.
     Returns an OAuthToken if available, otherwise raises an error.
     """
-    if configs.fhir.access_token:
+    if configs.server_access_token:
         logger.debug("Using configured FHIR access token for user.")
-        return OAuthToken(access_token=configs.fhir.access_token, token_type="Bearer")
-
-    disable_mcp_auth: bool = (
-        click_ctx.obj.get("disable_mcp_auth") if click_ctx.obj else False
-    )
-    client_access_token: str = ""
-    if not disable_mcp_auth:
-        client_token: AccessToken | None = get_access_token()
-        if not client_token:
-            logger.error("Failed to obtain client access token.")
-            raise ValueError("Failed to obtain client access token.")
-        client_access_token = client_token.token
+        return OAuthToken(access_token=configs.server_access_token, token_type="Bearer")
+    
+    user_token: AccessToken | None = get_access_token()
+    if not user_token:
+        logger.error("Failed to obtain client access token.")
+        raise ValueError("Failed to obtain client access token.")
 
     logger.debug("Obtained client access token from context.")
-    return await client_provider.get_access_token(client_access_token)
+
+    # Return the FHIR access token
+    return user_token
 
 
 @click.pass_context
@@ -93,46 +82,46 @@ async def get_async_fhir_client(click_ctx: click.Context) -> AsyncFHIRClient:
     Returns an AsyncFHIRClient instance.
     """
     client_kwargs: Dict = {
-        "config": configs.fhir,
+        "config": configs,
         "extra_headers": get_default_headers(),
     }
 
-    disable_fhir_auth: bool = (
-        click_ctx.obj.get("disable_fhir_auth") if click_ctx.obj else False
+    disable_auth: bool = (
+        click_ctx.obj.get("disable_auth") if click_ctx.obj else False
     )
-    if not disable_fhir_auth:
-        user_token: OAuthToken | None = await get_user_access_token()
+    if not disable_auth:
+        user_token: AccessToken | None = await get_user_access_token()
         if not user_token:
             logger.error("User is not authenticated.")
             raise ValueError("User is not authenticated.")
-        client_kwargs["access_token"] = user_token.access_token
+        client_kwargs["access_token"] = user_token.token
     else:
         logger.debug("FHIR authentication is disabled.")
     return await create_async_fhir_client(**client_kwargs)
 
 
-def configure_mcp_server(disable_mcp_auth: bool) -> FastMCP:
+def configure_mcp_server(disable_auth: bool) -> FastMCP:
     """
     Configure and instantiate the FastMCP server instance.
-    If disable_mcp_auth is True, the server will be started without authorization.
+    If disable_auth is True, the server will be started without authorization.
     Returns a FastMCP instance.
     """
     fastmcp_kwargs: Dict = {
         "name": "FHIR MCP Server",
         "instructions": "This server implements the HL7 FHIR MCP for secure, standards-based access to FHIR resources",
-        "host": configs.host,
-        "port": configs.port,
+        "host": configs.mcp_host,
+        "port": configs.mcp_port,
         "json_response": True,
         "stateless_http": True,
     }
-    if not disable_mcp_auth:
+    if not disable_auth:
         logger.debug("Enabling authorization for FHIR MCP server.")
         auth_settings: AuthSettings = AuthSettings(
             issuer_url=AnyHttpUrl(configs.effective_server_url),
             client_registration_options=ClientRegistrationOptions(
                 enabled=True,
-                valid_scopes=configs.oauth.scopes,
-                default_scopes=configs.oauth.scopes,
+                valid_scopes=configs.scopes,
+                default_scopes=configs.scopes,
             ),
         )
         fastmcp_kwargs["auth_server_provider"] = server_provider
@@ -145,31 +134,11 @@ def configure_mcp_server(disable_mcp_auth: bool) -> FastMCP:
 def register_mcp_routes(
     mcp: FastMCP,
     server_provider: OAuthServerProvider,
-    client_provider: FHIRClientProvider,
 ) -> None:
     """
     Register custom routes for the FastMCP server instance.
     """
     logger.debug("Registering custom MCP routes.")
-
-    @mcp.custom_route("/fhir/callback", methods=["GET"])
-    async def handle_fhir_server_callback(request: Request) -> HTMLResponse:
-        """Handle FHIR OAuth redirect."""
-        code: str | None = request.query_params.get("code")
-        state: str | None = request.query_params.get("state")
-
-        if not code or not state:
-            return handle_failed_authentication("Missing code or state parameter")
-
-        try:
-            await client_provider.handle_fhir_oauth_callback(code, state)
-            return handle_successful_authentication()
-        except Exception as ex:
-            logger.error(
-                "Error occurred while handling FHIR oauth callback. Caused by, ",
-                exc_info=ex,
-            )
-            return handle_failed_authentication("Something went wrong.")
 
     @mcp.custom_route("/oauth/callback", methods=["GET"])
     async def handle_auth_server_callback(request: Request) -> Response:
@@ -237,7 +206,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
         try:
             logger.debug(f"Invoked with resource_type='{type}'")
             data: Dict[str, Any] = await get_capability_statement(
-                configs.fhir.metadata_url
+                configs.metadata_url
             )
             for resource in data["rest"][0]["resource"]:
                 if resource.get("type") == type:
@@ -738,40 +707,32 @@ def register_mcp_tools(mcp: FastMCP) -> None:
     help="Log level to use",
 )
 @click.option(
-    "--disable-mcp-auth",
+    "--disable-auth",
     is_flag=True,
     default=False,
     show_default=True,
     help="Disable authorization between MCP client and MCP server. [default: False]",
 )
-@click.option(
-    "--disable-fhir-auth",
-    is_flag=True,
-    default=False,
-    show_default=True,
-    help="Disable authorization between MCP server and FHIR server. [default: False]",
-)
 @click.pass_context
 def main(
-    click_ctx: click.Context, transport, log_level, disable_mcp_auth, disable_fhir_auth
+    click_ctx: click.Context, transport, log_level, disable_auth
 ) -> int:
     """
     FHIR MCP Server - helping you expose any FHIR Server or API as a MCP Server.
     """
     # Store CLI options in context for downstream access
     click_ctx.ensure_object(dict)
-    click_ctx.obj["disable_fhir_auth"] = disable_fhir_auth
-    click_ctx.obj["disable_mcp_auth"] = disable_mcp_auth
+    click_ctx.obj["disable_auth"] = disable_auth
 
     logging.basicConfig(
         level=getattr(logging, log_level.upper()),
         format="[%(asctime)s] %(levelname)s {%(name)s.%(funcName)s:%(lineno)d} - %(message)s",
     )
     try:
-        mcp: FastMCP = configure_mcp_server(disable_mcp_auth)
+        mcp: FastMCP = configure_mcp_server(disable_auth)
         register_mcp_tools(mcp=mcp)
         register_mcp_routes(
-            mcp=mcp, server_provider=server_provider, client_provider=client_provider
+            mcp=mcp, server_provider=server_provider
         )
         logger.info(f"Starting FHIR MCP server with {transport} transport")
         mcp.run(transport=transport)

@@ -18,70 +18,52 @@ from pydantic import AnyHttpUrl, BaseModel
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class BaseOAuthConfigs(BaseSettings):
-    client_id: str = ""
-    client_secret: str = ""
-    scope: str = ""
-
-    @property
-    def scopes(self) -> list[str]:
-        # If the raw value is a string, split on empty spaces
-        if isinstance(self.scope, str):
-            return [scope.strip() for scope in self.scope.split(" ") if scope.strip()]
-        return [self.scope]
-
-
-class MCPOAuthConfigs(BaseOAuthConfigs):
-    metadata_url: str = ""
-
-    def callback_url(
-        self, server_url: str, suffix: str = "/oauth/callback"
-    ) -> AnyHttpUrl:
-        return AnyHttpUrl(f"{server_url.rstrip('/')}{suffix}")
-
-
-class FHIROAuthConfigs(BaseOAuthConfigs):
-    base_url: str = ""
-    timeout: int = 30  # in secs
-    access_token: str | None = None
-
-    def callback_url(
-        self, server_url: str, suffix: str = "/fhir/callback"
-    ) -> AnyHttpUrl:
-        return AnyHttpUrl(f"{server_url.rstrip('/')}{suffix}")
-
-    @property
-    def discovery_url(self) -> str:
-        return f"{self.base_url.rstrip('/')}/.well-known/smart-configuration"
-
-    @property
-    def metadata_url(self) -> str:
-        return f"{self.base_url.rstrip('/')}/metadata?_format=json"
-
-
 class ServerConfigs(BaseSettings):
     """Contains environment configurations of the MCP server."""
 
     model_config = SettingsConfigDict(
-        env_prefix="HEALTHCARE_MCP_",
+        env_prefix="FHIR_",
         env_file=".env",
         env_file_encoding="utf-8",
         env_nested_delimiter="__",
         extra="ignore",
     )
 
-    # Server settings
-    host: str = "localhost"
-    port: int = 8000
-    server_url: str | None = None
-    # OAuth2 settings
-    oauth: MCPOAuthConfigs = MCPOAuthConfigs()
+    # MCP Server settings
+    mcp_host: str = "localhost"
+    mcp_port: int = 8000
+    mcp_server_url: str | None = None
     # FHIR settings
-    fhir: FHIROAuthConfigs = FHIROAuthConfigs()
+    server_client_id: str = ""
+    server_client_secret: str = ""
+    server_scopes: str = ""
+    server_base_url: str = ""
+    server_request_timeout: int = 30  # in secs
+    server_access_token: str | None = None
+
+    def callback_url(
+        self, server_url: str, suffix: str = "/oauth/callback"
+    ) -> AnyHttpUrl:
+        return AnyHttpUrl(f"{server_url.rstrip('/')}{suffix}")
+
+    @property
+    def discovery_url(self) -> str:
+        return f"{self.server_base_url.rstrip('/')}/.well-known/smart-configuration"
+
+    @property
+    def metadata_url(self) -> str:
+        return f"{self.server_base_url.rstrip('/')}/metadata?_format=json"
+
+    @property
+    def scopes(self) -> list[str]:
+        # If the raw value is a string, split on empty spaces
+        if isinstance(self.server_scopes, str):
+            return [scope.strip() for scope in self.server_scopes.split(" ") if scope.strip()]
+        return [self.server_scopes]
 
     @property
     def effective_server_url(self) -> str:
-        return self.server_url or f"http://{self.host}:{self.port}"
+        return self.mcp_server_url or f"http://{self.mcp_host}:{self.mcp_port}"
 
     def __init__(self, **data):
         """Initialize settings with values from environment variables"""
