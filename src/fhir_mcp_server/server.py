@@ -63,21 +63,16 @@ async def get_user_access_token(click_ctx: click.Context) -> OAuthToken | None:
     if configs.server_access_token:
         logger.debug("Using configured FHIR access token for user.")
         return OAuthToken(access_token=configs.server_access_token, token_type="Bearer")
-
-    disable_auth: bool = (
-        click_ctx.obj.get("disable_auth") if click_ctx.obj else False
-    )
     
-    if not disable_auth:
-        client_token: AccessToken | None = get_access_token()
-        if not client_token:
-            logger.error("Failed to obtain client access token.")
-            raise ValueError("Failed to obtain client access token.")
+    user_token: AccessToken | None = get_access_token()
+    if not user_token:
+        logger.error("Failed to obtain client access token.")
+        raise ValueError("Failed to obtain client access token.")
 
     logger.debug("Obtained client access token from context.")
 
     # Return the FHIR access token
-    return client_token
+    return user_token
 
 
 @click.pass_context
@@ -125,8 +120,8 @@ def configure_mcp_server(disable_auth: bool) -> FastMCP:
             issuer_url=AnyHttpUrl(configs.effective_server_url),
             client_registration_options=ClientRegistrationOptions(
                 enabled=True,
-                valid_scopes=configs.scopes_,
-                default_scopes=configs.scopes_,
+                valid_scopes=configs.scopes,
+                default_scopes=configs.scopes,
             ),
         )
         fastmcp_kwargs["auth_server_provider"] = server_provider

@@ -68,7 +68,7 @@ class TestIntegration:
             # Test that the config values are properly set
             assert server_config.server_client_id == "test_client"
             assert server_config.server_client_secret == "test_secret"
-            assert server_config.scopes_ == ["read", "write"]
+            assert server_config.scopes == ["read", "write"]
             
             # Test callback URL generation
             callback_url = server_config.callback_url(server_config.effective_server_url)

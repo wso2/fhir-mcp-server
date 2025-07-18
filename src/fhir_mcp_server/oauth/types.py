@@ -55,7 +55,7 @@ class ServerConfigs(BaseSettings):
         return f"{self.server_base_url.rstrip('/')}/metadata?_format=json"
 
     @property
-    def scopes_(self) -> list[str]:
+    def scopes(self) -> list[str]:
         # If the raw value is a string, split on empty spaces
         if isinstance(self.server_scopes, str):
             return [scope.strip() for scope in self.server_scopes.split(" ") if scope.strip()]

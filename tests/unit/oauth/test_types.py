@@ -125,19 +125,19 @@ class TestServerConfigs:
         """Test scopes property with string scope."""
         with patch.dict(os.environ, {}, clear=True):
             config = ServerConfigs(server_scopes="read write admin", _env_file=None)
-            assert config.scopes_ == ["read", "write", "admin"]
+            assert config.scopes == ["read", "write", "admin"]
 
     def test_scopes_property_empty(self):
         """Test scopes property with empty scope."""
         with patch.dict(os.environ, {}, clear=True):
             config = ServerConfigs(server_scopes="", _env_file=None)
-            assert config.scopes_ == []
+            assert config.scopes == []
 
     def test_scopes_property_with_extra_spaces(self):
         """Test scopes property with extra spaces."""
         with patch.dict(os.environ, {}, clear=True):
             config = ServerConfigs(server_scopes="  read   write   admin  ", _env_file=None)
-            assert config.scopes_ == ["read", "write", "admin"]
+            assert config.scopes == ["read", "write", "admin"]
 
 
 class TestOAuthMetadata:
