@@ -29,7 +29,8 @@ The FHIR MCP Server is a Model Context Protocol (MCP) server that provides seaml
 
 ### Demo
 
-<img src="docs/gifs/vscode/epic/demo.gif" width="500" height="450"/>
+<video src="docs/videos/vscode/epic/demo-screen-recording.mp4" controls="controls" style="max-width: 730px;">
+</video>
 
 ### Core Features
 🔗 MCP-compatible transport: Serves FHIR via stdio, or streamable HTTP
