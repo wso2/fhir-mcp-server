@@ -178,7 +178,7 @@ Add the following JSON block to your User Settings (JSON) file in VS Code (> V1.
     "servers": {
         "fhir": {
             "type": "http",
-            "url": "http://localhost:8000/mcp/",
+            "url": "http://localhost:8000/mcp",
         }
     }
 }
@@ -216,7 +216,7 @@ Add the following JSON block to your User Settings (JSON) file in VS Code (> V1.
     "servers": {
         "fhir": {
             "type": "sse",
-            "url": "http://localhost:8000/sse/",
+            "url": "http://localhost:8000/sse",
         }
     }
 }
