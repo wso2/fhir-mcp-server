@@ -7,57 +7,65 @@
 
 ## Table of Contents
 - [Overview](#overview)
+- [Demo](#demo)
+    - [Demo with HAPI FHIR server](#demo-with-hapi-fhir-server)
+    - [Demo with EPIC Sandbox](#demo-with-epic-sandbox)
+- [Core Features](#core-features)
 - [Prerequisites](#prerequisites)
-- [Usage](#usage)
-    - [Install using the Python Package](#install-using-the-python-package)
+- [Installation](#installation)
+    - [Installing using PyPI Package](#installing-using-pypi-package)
     - [Installing from Source](#installing-from-source)
-    - [Running with Docker](#running-with-docker)
+    - [Installing using Docker](#installing-using-docker)
+- [Integration with MCP Clients](#integration-with-mcp-clients)
+    - [VS Code](#vs-code)
+    - [Claude Desktop](#claude-desktop)
+    - [MCP Inspector](#mcp-inspector)
 - [Configuration](#configuration)
-  - [CLI Options](#cli-options)
-  - [Environment Variables](#environment-variables)
-- [Integration](#integration)
-    - [VS Code Integration](#vs-code-integration)
-    - [Claude Desktop Integration](#claude-desktop-integration)
-    - [MCP Inspector Integration](#mcp-inspector-integration)
+    - [CLI Options](#cli-options)
+    - [Environment Variables](#environment-variables)
 - [Tools](#tools)
 - [Development & Testing](#development--testing)
+    - [Installing Development Dependencies](#installing-development-dependencies)
+    - [Running Tests](#running-tests)
 
 
 ## Overview
 
 The FHIR MCP Server is a Model Context Protocol (MCP) server that provides seamless integration with FHIR APIs. Designed for developers, integrators, and healthcare innovators, this server acts as a bridge between modern AI/LLM tools and healthcare data, making it easy to search, retrieve, and analyze clinical information.
 
-### Demo
+## Demo
 
-#### Demo with HAPI FHIR server
+### Demo with HAPI FHIR server
 
 This video showcases the MCP server's functionality when connected to a public [HAPI FHIR server](https://hapi.fhir.org/). This example showcases direct interaction with an open FHIR server that does not require an authorization flow.
 
 https://github.com/user-attachments/assets/899874d6-df6f-4400-9d72-0682e225abbd
 
-#### Demo with EPIC Sandbox
+### Demo with EPIC Sandbox
 
 This video showcases the MCP server's capabilities within the [Epic EHR ecosystem](https://open.epic.com/). It demonstrates the complete OAuth 2.0 Authorization Code Grant flow.
 
 https://github.com/user-attachments/assets/f73a3666-b291-4ede-a253-ea7aaf405c12
 
-### Core Features
-- MCP-compatible transport: Serves FHIR via stdio, SSE, or streamable HTTP
+## Core Features
 
-- SMART-on-FHIR based authentication support: Securely authenticate with FHIR servers and clients
+- **MCP-compatible transport**: Serves FHIR via stdio, SSE, or streamable HTTP
 
-- Tool integration: Integratable with any MCP client such as VS Code, Claude Desktop, and MCP Inspector
+- **SMART-on-FHIR based authentication support**: Securely authenticate with FHIR servers and clients
+
+- **Tool integration**: Integratable with any MCP client such as VS Code, Claude Desktop, and MCP Inspector
 
 ## Prerequisites
+
 - Python 3.8+
 - [uv](https://github.com/astral-sh/uv) (for dependency management)
 - An accessible FHIR API server.
 
-## Usage
+## Installation
 
-You can use the FHIR MCP Server by installing our Python package or by cloning this repository.
+You can use the FHIR MCP Server by installing our Python package, by cloning this repository or by running as a docker container.
 
-### Installation from PyPI
+### Installing using PyPI Package
 
 1. **Configure Environment Variables:**
 
@@ -74,8 +82,16 @@ You can use the FHIR MCP Server by installing our Python package or by cloning t
     export FHIR_MCP_HOST="localhost"
     export FHIR_MCP_PORT="8000"
     ```
+
 2. **Install the PyPI package and run the server**
 
+    If you are exposing a FHIR server with no security:
+
+    ```bash
+    uvx fhir-mcp-server --disable-auth
+    ```
+
+    else;
     ```bash
     uvx fhir-mcp-server
     ```
@@ -87,6 +103,7 @@ You can use the FHIR MCP Server by installing our Python package or by cloning t
     git clone <repository_url>
     cd <repository_directory>
     ```
+
 2. **Create a virtual environment and install dependencies:**
     ```bash
     uv venv
@@ -99,6 +116,7 @@ You can use the FHIR MCP Server by installing our Python package or by cloning t
     source .venv/bin/activate
     pip install -r requirements.txt
     ```
+
 3. **Configure Environment Variables:**
     Copy the example file and customize if needed:
     ```bash
@@ -110,7 +128,7 @@ You can use the FHIR MCP Server by installing our Python package or by cloning t
     uv run fhir-mcp-server
     ```
 
-### Running with Docker
+### Installing using Docker
 
 You can run the MCP server using Docker for a consistent, isolated environment. 
 
@@ -139,59 +157,11 @@ You can run the MCP server using Docker for a consistent, isolated environment.
 
     This will start the server and expose it on port 8000. Adjust the port mapping as needed.
 
-## Configuration
-
-### CLI Options
-
-You can customize the behavior of the MCP server using the following command-line flags:
-
-- **--transport**
-    - Description: Specifies the transport protocol used by the MCP server to communicate with clients.
-    - Accepted values: stdio, sse, streamable-http
-    - Default: streamable-http
-
-- **--log-level**
-    - Description: Sets the logging verbosity level for the server.
-    - Accepted values: DEBUG, INFO, WARN, ERROR (case-insensitive)
-    - Default: INFO
-
-- **--disable-auth**
-    - Description: Disables the security of the MCP Server. Allows you to connect with openly available FHIR servers.
-    - Type: Flag (no value required)
-    - Default: False (authentication enabled)
-
-- **--help**
-    - Description: Displays a help message with available server options and exits.
-    - Usage: Automatically provided by the command-line interface.
-
-Sample Usages:
-
-```shell
-uv run fhir-mcp-server --transport streamable-http --log-level DEBUG --disable-auth
-uv run fhir-mcp-server --help
-```
-
-### Environment Variables
-
-**MCP Server Configurations:**
-- `FHIR_MCP_HOST`: The hostname or IP address the MCP server should bind to (e.g., `localhost` for local-only access, or `0.0.0.0` for all interfaces).
-- `FHIR_MCP_PORT`: The port on which the MCP server will listen for incoming client requests (e.g., `8000`).
-
-**MCP Server OAuth2 with FHIR server Configuration (MCP Client ↔ MCP Server):**
-These variables configure the MCP client's secure connection to the MCP server, using the OAuth2 authorization code grant flow with a FHIR server.
-
-- `FHIR_SERVER_CLIENT_ID`: The OAuth2 client ID used to authorize MCP clients with the FHIR server.
-- `FHIR_SERVER_CLIENT_SECRET`: The client secret corresponding to the FHIR client ID. Used during token exchange.
-- `FHIR_SERVER_BASE_URL`: The base URL of the FHIR server (e.g., `https://hapi.fhir.org/baseR4`). This is used to generate tool URIs and to route FHIR requests.
-- `FHIR_SERVER_SCOPES`: A space-separated list of OAuth2 scopes to request from the FHIR authorization server (e.g., `user/Patient.read user/Observation.read`).
-- `FHIR_SERVER_ACCESS_TOKEN`: The access token to use for authenticating requests to the FHIR server. If this variable is set, the server will bypass the OAuth2 authorization flow and use this token directly for all requests.
-
-
 ## Integration with MCP Clients
 
 The FHIR MCP Server is designed for seamless integration with various MCP clients.
 
-### VS Code Integration
+### VS Code
 
 [![Install in VS Code](https://img.shields.io/badge/VS_Code-Install_Server-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=fhir&config=%7B%22type%22%3A%22http%22%2C%22url%22%3A%22http%3A%2F%2Flocalhost%3A8000%2Fmcp%2F%22%7D)
 [![Install in VS Code Insiders](https://img.shields.io/badge/VS_Code_Insiders-Install_Server-24bfa5?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=fhir&config=%7B%22type%22%3A%22http%22%2C%22url%22%3A%22http%3A%2F%2Flocalhost%3A8000%2Fmcp%2F%22%7D)
@@ -208,7 +178,7 @@ Add the following JSON block to your User Settings (JSON) file in VS Code (> V1.
     "servers": {
         "fhir": {
             "type": "http",
-            "url": "http://localhost:8000/mcp/",
+            "url": "http://localhost:8000/mcp",
         }
     }
 }
@@ -246,7 +216,7 @@ Add the following JSON block to your User Settings (JSON) file in VS Code (> V1.
     "servers": {
         "fhir": {
             "type": "sse",
-            "url": "http://localhost:8000/sse/",
+            "url": "http://localhost:8000/sse",
         }
     }
 }
@@ -255,7 +225,7 @@ Add the following JSON block to your User Settings (JSON) file in VS Code (> V1.
 </tr>
 </table>
 
-### Claude Desktop Integration
+### Claude Desktop
 Add the following JSON block to your Claude Desktop settings to connect to your local MCP server. 
  - Launch the Claude Desktop app, click on the Claude menu in the top bar, and select "Settings…".
  - In the Settings pane, click “Developer” in the left sidebar. Then click "Edit Config". This will open your configuration file in your file system. If it doesn’t exist yet, Claude will create one automatically at:
@@ -327,7 +297,7 @@ Add the following JSON block to your Claude Desktop settings to connect to your 
 </tr>
 </table>
 
-### MCP Inspector Integration
+### MCP Inspector
 Follow these steps to get the MCP Inspector up and running:
 
 - Open a terminal and run the following command:
@@ -362,6 +332,55 @@ Follow these steps to get the MCP Inspector up and running:
 Make sure your MCP server is already running and listening on the above endpoint.
 
 Once connected, MCP Inspector will allow you to visualize tool invocations, inspect request/response payloads, and debug your tool implementations easily.
+
+## Configuration
+
+### CLI Options
+
+You can customize the behavior of the MCP server using the following command-line flags:
+
+- **--transport**
+    - Description: Specifies the transport protocol used by the MCP server to communicate with clients.
+    - Accepted values: stdio, sse, streamable-http
+    - Default: streamable-http
+
+- **--log-level**
+    - Description: Sets the logging verbosity level for the server.
+    - Accepted values: DEBUG, INFO, WARN, ERROR (case-insensitive)
+    - Default: INFO
+
+- **--disable-auth**
+    - Description: Disables the security of the MCP Server. Allows you to connect with openly available FHIR servers.
+    - Type: Flag (no value required)
+    - Default: False (authentication enabled)
+
+- **--help**
+    - Description: Displays a help message with available server options and exits.
+    - Usage: Automatically provided by the command-line interface.
+
+Sample Usages:
+
+```shell
+uv run fhir-mcp-server --transport streamable-http --log-level DEBUG --disable-auth
+uv run fhir-mcp-server --help
+```
+
+### Environment Variables
+
+**MCP Server Configurations:**
+- `FHIR_MCP_HOST`: The hostname or IP address the MCP server should bind to (e.g., `localhost` for local-only access, or `0.0.0.0` for all interfaces).
+- `FHIR_MCP_PORT`: The port on which the MCP server will listen for incoming client requests (e.g., `8000`).
+
+**MCP Server OAuth2 with FHIR server Configuration (MCP Client ↔ MCP Server):**
+These variables configure the MCP client's secure connection to the MCP server, using the OAuth2 authorization code grant flow with a FHIR server.
+
+- `FHIR_SERVER_CLIENT_ID`: The OAuth2 client ID used to authorize MCP clients with the FHIR server.
+- `FHIR_SERVER_CLIENT_SECRET`: The client secret corresponding to the FHIR client ID. Used during token exchange.
+- `FHIR_SERVER_BASE_URL`: The base URL of the FHIR server (e.g., `https://hapi.fhir.org/baseR4`). This is used to generate tool URIs and to route FHIR requests.
+- `FHIR_SERVER_SCOPES`: A space-separated list of OAuth2 scopes to request from the FHIR authorization server (e.g., `user/Patient.read user/Observation.read`).
+- `FHIR_SERVER_ACCESS_TOKEN`: The access token to use for authenticating requests to the FHIR server. If this variable is set, the server will bypass the OAuth2 authorization flow and use this token directly for all requests.
+
+
 
 ## Tools
 

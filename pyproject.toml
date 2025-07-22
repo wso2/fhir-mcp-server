@@ -1,7 +1,8 @@
 [project]
 authors = [
-  {name = "Vimukthi", email = "vimukthir@wso2.com"},
-  {name = "Joel", email = "joel@wso2.com"}
+  {name = "Vimukthi Rajapaksha", email = "vimukthir@wso2.com"},
+  {name = "Joel Sathiyendra", email = "joel@wso2.com"},
+  {name = "Nirmal Fernando", email = "nirmal@wso2.com"}
 ]
 classifiers = [
   "Development Status :: 4 - Beta",
