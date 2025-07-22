@@ -31,7 +31,7 @@ The FHIR MCP Server is a Model Context Protocol (MCP) server that provides seaml
 
 #### Demo with HAPI FHIR server
 
-This video showcases the MCP server's functionality when connected to a public [HAPI FHIR server](https://hapi.fhir.org/). This example showcases direct interaction with an open server that does not require an authorization flow.
+This video showcases the MCP server's functionality when connected to a public [HAPI FHIR server](https://hapi.fhir.org/). This example showcases direct interaction with an open FHIR server that does not require an authorization flow.
 
 https://github.com/user-attachments/assets/899874d6-df6f-4400-9d72-0682e225abbd
 
