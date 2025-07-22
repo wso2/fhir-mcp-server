@@ -38,7 +38,7 @@ class TestIntegration:
             
             # Set the server config after initialization
             config.server_base_url = "https://custom.fhir.org"
-            config.server_request_timeout = 60
+            config.mcp_request_timeout = 60
             
             # Test that nested configuration works
             assert config.mcp_host == "0.0.0.0"
@@ -51,7 +51,7 @@ class TestIntegration:
             
             # Test server config integration
             assert config.server_base_url == "https://custom.fhir.org"
-            assert config.server_request_timeout == 60
+            assert config.mcp_request_timeout == 60
 
     def test_fhir_oauth_config_integration(self):
         """Test FHIR OAuth config integration with server config."""

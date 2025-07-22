@@ -36,7 +36,7 @@ async def create_async_fhir_client(
     client_kwargs: Dict = {
         "url": config.server_base_url,
         "aiohttp_config": {
-            "timeout": aiohttp.ClientTimeout(total=config.server_request_timeout),
+            "timeout": aiohttp.ClientTimeout(total=config.mcp_request_timeout),
         },
         "extra_headers": extra_headers,
     }

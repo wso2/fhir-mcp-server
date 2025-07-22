@@ -81,7 +81,7 @@ class TestCreateAsyncFhirClient:
     @pytest.mark.asyncio
     async def test_create_client_with_custom_timeout(self):
         """Test creating FHIR client with custom timeout."""
-        config = ServerConfigs(server_base_url="https://example.fhir.org/R4", server_request_timeout=60)
+        config = ServerConfigs(server_base_url="https://example.fhir.org/R4", mcp_request_timeout=60)
         
         with patch('fhir_mcp_server.utils.AsyncFHIRClient') as mock_client, \
              patch('fhir_mcp_server.utils.aiohttp.ClientTimeout') as mock_timeout:

@@ -42,7 +42,7 @@ class TestServerConfigs:
             assert config.server_client_secret == ""
             assert config.server_scopes == ""
             assert config.server_base_url == ""
-            assert config.server_request_timeout == 30
+            assert config.mcp_request_timeout == 30
             assert config.server_access_token is None
 
     def test_effective_server_url_default(self):
@@ -69,13 +69,13 @@ class TestServerConfigs:
             config = ServerConfigs(
                 server_client_id="test_client",
                 server_base_url="https://example.com/fhir",
-                server_request_timeout=120,
+                mcp_request_timeout=120,
                 _env_file=None
             )
 
             assert config.server_client_id == "test_client"
             assert config.server_base_url == "https://example.com/fhir"
-            assert config.server_request_timeout == 120
+            assert config.mcp_request_timeout == 120
 
     def test_callback_url_basic(self):
         """Test callback URL generation."""
