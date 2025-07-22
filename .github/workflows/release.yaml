@@ -1,0 +1,269 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "[0-9]+.[0-9]+.[0-9]+"
+      - "[0-9]+.[0-9]+.[0-9]+a[0-9]+"
+      - "[0-9]+.[0-9]+.[0-9]+b[0-9]+"
+      - "[0-9]+.[0-9]+.[0-9]+rc[0-9]+"
+
+# Set default permissions to read-only for security
+permissions:
+  contents: read
+
+env:
+  PACKAGE_NAME: "fhir-mcp-server"
+
+jobs:
+  details:
+    runs-on: ubuntu-latest
+    outputs:
+      new_version: ${{ steps.release.outputs.new_version }}
+      suffix: ${{ steps.release.outputs.suffix }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@v4
+
+      - name: Extract tag and Details
+        id: release
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            TAG_NAME=${GITHUB_REF#refs/tags/}
+            
+            # Validate tag format
+            if [[ ! "$TAG_NAME" =~ ^[0-9]+\.[0-9]+\.[0-9]+([a-z]+[0-9]+)?$ ]]; then
+              echo "Error: Invalid tag format: $TAG_NAME"
+              exit 1
+            fi
+            
+            NEW_VERSION=$(echo $TAG_NAME | awk -F'-' '{print $1}')
+            SUFFIX=$(echo $TAG_NAME | grep -oP '[a-z]+[0-9]+' || echo "")
+            echo "new_version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+            echo "suffix=$SUFFIX" >> "$GITHUB_OUTPUT"
+            echo "tag_name=$TAG_NAME" >> "$GITHUB_OUTPUT"
+            echo "Version is $NEW_VERSION"
+            echo "Suffix is $SUFFIX"
+            echo "Tag name is $TAG_NAME"
+          else
+            echo "Error: No tag found"
+            exit 1
+          fi
+
+  check_pypi:
+    needs: details
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+
+      - name: Fetch information from PyPI
+        run: |
+          set -euo pipefail  # Enable strict error handling
+          
+          echo "Checking package ${{ env.PACKAGE_NAME }} on PyPI..."
+          response=$(curl -s --fail-with-body "https://pypi.org/pypi/${{ env.PACKAGE_NAME }}/json" || echo "{}")
+          
+          latest_previous_version=$(echo "$response" | jq --raw-output "select(.releases != null) | .releases | keys_unsorted | last" || echo "")
+          
+          if [ -z "$latest_previous_version" ] || [ "$latest_previous_version" = "null" ]; then
+            echo "Package not found on PyPI or no releases available."
+            latest_previous_version="0.0.0"
+          fi
+          
+          echo "Latest version on PyPI: $latest_previous_version"
+          echo "latest_previous_version=$latest_previous_version" >> $GITHUB_ENV
+
+      - name: Compare versions and exit if not newer
+        run: |
+          set -euo pipefail
+          
+          NEW_VERSION=${{ needs.details.outputs.new_version }}
+          LATEST_VERSION=$latest_previous_version
+          
+          echo "Comparing versions: $LATEST_VERSION (PyPI) vs $NEW_VERSION (new)"
+          
+          if [ "$(printf '%s\n' "$LATEST_VERSION" "$NEW_VERSION" | sort -rV | head -n 1)" != "$NEW_VERSION" ] || [ "$NEW_VERSION" == "$LATEST_VERSION" ]; then
+            echo "Error: The new version $NEW_VERSION is not greater than the latest version $LATEST_VERSION on PyPI."
+            exit 1
+          else
+            echo "✓ The new version $NEW_VERSION is greater than the latest version $LATEST_VERSION on PyPI."
+          fi
+
+  setup_and_build:
+    needs: [details, check_pypi]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Set project version in pyproject.toml
+        run: |
+          set -euo pipefail
+          
+          echo "Setting version to ${{ needs.details.outputs.new_version }}"
+          
+          # Create backup
+          cp pyproject.toml pyproject.toml.bak
+          
+          # Update version
+          sed -i 's/^version = ".*"/version = "${{ needs.details.outputs.new_version }}"/' pyproject.toml
+          
+          # Verify the change
+          if ! grep -q 'version = "${{ needs.details.outputs.new_version }}"' pyproject.toml; then
+            echo "Error: Failed to update version in pyproject.toml"
+            mv pyproject.toml.bak pyproject.toml
+            exit 1
+          fi
+          
+          echo "✓ Version updated successfully"
+
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          uv sync --frozen
+
+      - name: Build source and wheel distribution
+        run: |
+          set -euo pipefail
+          uv build
+          
+          # Verify build artifacts exist
+          if [ ! -d "dist" ] || [ -z "$(ls -A dist)" ]; then
+            echo "Error: Build failed - no artifacts found in dist/"
+            exit 1
+          fi
+          
+          echo "✓ Build completed successfully"
+          ls -la dist/
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          retention-days: 30
+
+  pypi_publish:
+    name: Upload release to PyPI
+    needs: [setup_and_build, details]
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write  # Required for OIDC
+      contents: read   # Required for checkout
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Verify artifacts
+        run: |
+          set -euo pipefail
+          
+          echo "Verifying build artifacts..."
+          if [ ! -d "dist" ] || [ -z "$(ls -A dist)" ]; then
+            echo "Error: No build artifacts found"
+            exit 1
+          fi
+          
+          # Check for both wheel and source distribution
+          if ! ls dist/*.whl >/dev/null 2>&1; then
+            echo "Error: No wheel file found"
+            exit 1
+          fi
+          
+          if ! ls dist/*.tar.gz >/dev/null 2>&1; then
+            echo "Error: No source distribution found"
+            exit 1
+          fi
+          
+          echo "✓ Artifacts verified:"
+          ls -la dist/
+
+      - name: Publish distribution to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          print-hash: true
+          verbose: true
+
+  github_release:
+    name: Create GitHub Release
+    needs: [setup_and_build, details]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Required for creating releases
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Verify artifacts for release
+        run: |
+          set -euo pipefail
+          
+          echo "Verifying artifacts for GitHub release..."
+          if [ ! -d "dist" ] || [ -z "$(ls -A dist)" ]; then
+            echo "Error: No artifacts found for release"
+            exit 1
+          fi
+          
+          echo "✓ Artifacts ready for release:"
+          ls -la dist/
+
+      - name: Create GitHub Release
+        id: create_release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          
+          echo "Creating GitHub release for tag ${{ needs.details.outputs.tag_name }}"
+          
+          gh release create "${{ needs.details.outputs.tag_name }}" \
+            dist/* \
+            --title "${{ needs.details.outputs.tag_name }}" \
+            --generate-notes \
+            --verify-tag
+            
+          echo "✓ GitHub release created successfully"
