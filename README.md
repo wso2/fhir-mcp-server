@@ -370,6 +370,8 @@ uv run fhir-mcp-server --help
 **MCP Server Configurations:**
 - `FHIR_MCP_HOST`: The hostname or IP address the MCP server should bind to (e.g., `localhost` for local-only access, or `0.0.0.0` for all interfaces).
 - `FHIR_MCP_PORT`: The port on which the MCP server will listen for incoming client requests (e.g., `8000`).
+- `FHIR_MCP_SERVER_URL`: If set, this value will be used as the server's base URL instead of generating it from host and port. Useful for custom URL configurations or when behind a proxy.
+- `FHIR_MCP_REQUEST_TIMEOUT`: Timeout duration in seconds for requests from the MCP server to the FHIR server (default: `30`).
 
 **MCP Server OAuth2 with FHIR server Configuration (MCP Client ↔ MCP Server):**
 These variables configure the MCP client's secure connection to the MCP server, using the OAuth2 authorization code grant flow with a FHIR server.
@@ -379,8 +381,6 @@ These variables configure the MCP client's secure connection to the MCP server, 
 - `FHIR_SERVER_BASE_URL`: The base URL of the FHIR server (e.g., `https://hapi.fhir.org/baseR4`). This is used to generate tool URIs and to route FHIR requests.
 - `FHIR_SERVER_SCOPES`: A space-separated list of OAuth2 scopes to request from the FHIR authorization server (e.g., `user/Patient.read user/Observation.read`).
 - `FHIR_SERVER_ACCESS_TOKEN`: The access token to use for authenticating requests to the FHIR server. If this variable is set, the server will bypass the OAuth2 authorization flow and use this token directly for all requests.
-
-
 
 ## Tools
 

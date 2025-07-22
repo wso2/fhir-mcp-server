@@ -33,12 +33,13 @@ class ServerConfigs(BaseSettings):
     mcp_host: str = "localhost"
     mcp_port: int = 8000
     mcp_server_url: str | None = None
+    mcp_request_timeout: int = 30  # in secs
+
     # FHIR settings
     server_client_id: str = ""
     server_client_secret: str = ""
     server_scopes: str = ""
     server_base_url: str = ""
-    server_request_timeout: int = 30  # in secs
     server_access_token: str | None = None
 
     def callback_url(
