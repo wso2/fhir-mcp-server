@@ -9,8 +9,9 @@
 - [Overview](#overview)
 - [Prerequisites](#prerequisites)
 - [Usage](#usage)
-    - [Via Python Package](#via-python-package)
-    - [Via Repository](#via-repository)
+    - [Install using the Python Package](#install-using-the-python-package)
+    - [Installing from Source](#installing-from-source)
+    - [Running with Docker](#running-with-docker)
 - [Configuration](#configuration)
   - [CLI Options](#cli-options)
   - [Environment Variables](#environment-variables)
@@ -19,7 +20,6 @@
     - [Claude Desktop Integration](#claude-desktop-integration)
     - [MCP Inspector Integration](#mcp-inspector-integration)
 - [Tools](#tools)
-- [Docker Setup](#docker-setup)
 - [Development & Testing](#development--testing)
 
 
@@ -29,15 +29,26 @@ The FHIR MCP Server is a Model Context Protocol (MCP) server that provides seaml
 
 ### Demo
 
-<video src="docs/videos/vscode/epic/demo-screen-recording.mp4" controls="controls" style="max-width: 730px;">
+#### Demo with Hapi FHIR server
+
+This video showcases the MCP server's functionality when connected to a public [HAPI FHIR server](https://hapi.fhir.org/). This example showcases direct interaction with an open server that does not require an authorization flow.
+
+<video src="https://github.com/joelsathi/fhir-mcp-server/blob/readme-update/docs/videos/vscode/epic/demo-screen-recording.mp4" controls="controls" style="max-width: 730px;">
+</video>
+
+#### Demo with EPIC Sandbox
+
+This video showcases the MCP server's capabilities within the [Epic EHR ecosystem](https://open.epic.com/). It demonstrates the complete OAuth 2.0 Authorization Code Grant flow.
+
+<video src="https://github.com/joelsathi/fhir-mcp-server/blob/readme-update/docs/videos/vscode/hapi/demo-screen-recording.mp4" controls="controls" style="max-width: 730px;">
 </video>
 
 ### Core Features
-🔗 MCP-compatible transport: Serves FHIR via stdio, or streamable HTTP
+- MCP-compatible transport: Serves FHIR via stdio, SSE, or streamable HTTP
 
-🔐 SMART-on-FHIR based authentication support: Securely authenticate with FHIR servers and clients
+- SMART-on-FHIR based authentication support: Securely authenticate with FHIR servers and clients
 
-⚙️ Tool integration: Integratable with any MCP client such as VS Code, Claude Desktop, and MCP Inspector
+- Tool integration: Integratable with any MCP client such as VS Code, Claude Desktop, and MCP Inspector
 
 ## Prerequisites
 - Python 3.8+
@@ -46,15 +57,15 @@ The FHIR MCP Server is a Model Context Protocol (MCP) server that provides seaml
 
 ## Usage
 
-You can use the FHIR MCP Server either as a Python package or by cloning its repository.
+You can use the FHIR MCP Server by installing our Python package or by cloning this repository.
 
-### Via Python Package
+### Installation from PyPI
 
 1. **Configure Environment Variables:**
 
     To run the server, you must set `FHIR_SERVER_BASE_URL`. If you plan to use authorization, you'll also need to configure `FHIR_SERVER_CLIENT_ID`, `FHIR_SERVER_CLIENT_SECRET`, and `FHIR_SERVER_SCOPES`. By default, the MCP server will listen on http://localhost:8000. You can customize the host and port by setting `FHIR_MCP_HOST` and `FHIR_MCP_PORT` respectively.
 
-    You can set these by exporting them in your shell or by creating a `.env` file (referencing `.env.example`).
+    You can set these by exporting them as environment variables like below or by creating a `.env` file (referencing `.env.example`).
 
     ```bash 
     export FHIR_SERVER_BASE_URL=""
@@ -71,7 +82,7 @@ You can use the FHIR MCP Server either as a Python package or by cloning its rep
     uvx fhir-mcp-server
     ```
 
-### Via Repository
+### Installing from Source
 
 1. **Clone the repository:**
     ```bash
@@ -100,6 +111,35 @@ You can use the FHIR MCP Server either as a Python package or by cloning its rep
     ```bash
     uv run fhir-mcp-server
     ```
+
+### Running with Docker
+
+You can run the MCP server using Docker for a consistent, isolated environment. 
+
+1. Build the Docker Image
+
+    ```bash
+    docker build -t fhir-mcp-server .
+    ```
+
+2. Configure Environment Variables
+
+    Copy the example environment file and edit as needed:
+
+    ```bash
+    cp .env.example .env
+    # Edit .env to set your FHIR server, client credentials, etc.
+    ```
+
+    Alternatively, you can pass environment variables directly with `-e` flags or use Docker secrets for sensitive values.
+
+3. Run the Container
+
+    ```bash
+    docker run --env-file .env -p 8000:8000 fhir-mcp-server
+    ```
+
+    This will start the server and expose it on port 8000. Adjust the port mapping as needed.
 
 ## Configuration
 
@@ -146,6 +186,7 @@ These variables configure the MCP client's secure connection to the MCP server, 
 - `FHIR_SERVER_CLIENT_SECRET`: The client secret corresponding to the FHIR client ID. Used during token exchange.
 - `FHIR_SERVER_BASE_URL`: The base URL of the FHIR server (e.g., `https://hapi.fhir.org/baseR4`). This is used to generate tool URIs and to route FHIR requests.
 - `FHIR_SERVER_SCOPES`: A space-separated list of OAuth2 scopes to request from the FHIR authorization server (e.g., `user/Patient.read user/Observation.read`).
+- `FHIR_SERVER_ACCESS_TOKEN`: The access token to use for authenticating requests to the FHIR server. If this variable is set, the server will bypass the OAuth2 authorization flow and use this token directly for all requests.
 
 
 ## Integration
@@ -160,7 +201,7 @@ The FHIR MCP Server is designed for seamless integration with various MCP client
 Add the following JSON block to your User Settings (JSON) file in VS Code (> V1.101). You can do this by pressing Ctrl + Shift + P and typing Preferences: Open User Settings (JSON).
 
 <table>
-<tr><th>Streamable HTTP</th><th>STDIO</th></tr>
+<tr><th>Streamable HTTP</th><th>STDIO</th><th>SSE</th></tr>
 <tr valign=top>
 <td>
 
@@ -192,8 +233,22 @@ Add the following JSON block to your User Settings (JSON) file in VS Code (> V1.
                 "stdio"
             ],
             "env": {
-                "HEALTHCARE_MCP_FHIR__ACCESS_TOKEN": "Your FHIR Access Token"
+                "FHIR_SERVER_ACCESS_TOKEN": "Your FHIR Access Token"
             }
+        }
+    }
+}
+```
+</td>
+
+<td>
+
+```json
+"mcp": {
+    "servers": {
+        "fhir": {
+            "type": "sse",
+            "url": "http://localhost:8000/sse/",
         }
     }
 }
@@ -211,7 +266,7 @@ Add the following JSON block to your Claude Desktop settings to connect to your 
  - Open the claude_desktop_config.json file in any text editor. Replace its contents with the following JSON block to register the MCP server:
 
 <table>
-<tr><th>Streamable HTTP</th><th>STDIO</th></tr>
+<tr><th>Streamable HTTP</th><th>STDIO</th><th>SSE</th></tr>
 <tr valign=top>
 <td>
 
@@ -246,8 +301,26 @@ Add the following JSON block to your Claude Desktop settings to connect to your 
                 "stdio"
             ],
             "env": {
-                "HEALTHCARE_MCP_FHIR__ACCESS_TOKEN": "Your FHIR Access Token"
+                "FHIR_SERVER_ACCESS_TOKEN": "Your FHIR Access Token"
             }
+        }
+    }
+}
+```
+</td>
+
+<td>
+
+```json
+{
+    "mcpServers": {
+        "fhir": {
+            "command": "npx",
+            "args": [
+                "-y",
+                "mcp-remote",
+                "http://localhost:8000/sse"
+            ]
         }
     }
 }
@@ -265,7 +338,7 @@ Follow these steps to get the MCP Inspector up and running:
 
 - In the MCP Inspector interface:
 <table>
-<tr><th>Streamable HTTP</th><th>STDIO</th></tr>
+<tr><th>Streamable HTTP</th><th>STDIO</th><th>SSE</th></tr>
 <tr valign=top>
 <td>
 
@@ -278,6 +351,12 @@ Follow these steps to get the MCP Inspector up and running:
 - Transport Type: `STDIO`
 - Command: `uv`
 - Arguments: `--directory /path/to/fhir-mcp-server run fhir-mcp-server --transport stdio`
+</td>
+
+<td>
+
+- Transport Type: `SSE`
+- URL: `http://localhost:8000/sse`
 </td>
 </tr>
 </table>
@@ -320,35 +399,6 @@ Once connected, MCP Inspector will allow you to visualize tool invocations, insp
     - `searchParam`: A mapping of FHIR search parameter names to their desired values (e.g., {"category":"laboratory","issued:"2025-05-01"}).
     - `operation`: The name of a custom FHIR operation or extended query defined for the resource (e.g., "$expand").
 
-## Docker Setup
-
-You can run the MCP server using Docker for a consistent, isolated environment. 
-
-### 1. Build the Docker Image
-
-```bash
-docker build -t fhir-mcp-server .
-```
-
-### 2. Configure Environment Variables
-
-Copy the example environment file and edit as needed:
-
-```bash
-cp .env.example .env
-# Edit .env to set your FHIR server, client credentials, etc.
-```
-
-Alternatively, you can pass environment variables directly with `-e` flags or use Docker secrets for sensitive values.
-
-### 3. Run the Container
-
-```bash
-docker run --env-file .env -p 8000:8000 fhir-mcp-server
-```
-
-This will start the server and expose it on port 8000. Adjust the port mapping as needed.
-
 ## Development & Testing
 
 ### Installing Development Dependencies
@@ -389,11 +439,11 @@ This will discover and run all tests in the `tests/` directory.
 
 
 **Test Features:**
-- 🧪 **100+ tests** with comprehensive coverage
-- 🔄 **Full async/await support** using pytest-asyncio
-- 🎭 **Complete mocking** of HTTP requests and external dependencies
-- 📊 **Coverage reporting** with terminal and HTML output
-- ⚡ **Fast execution** with no real network calls
+- **100+ tests** with comprehensive coverage
+- **Full async/await support** using pytest-asyncio
+- **Complete mocking** of HTTP requests and external dependencies
+- **Coverage reporting** with terminal and HTML output
+- **Fast execution** with no real network calls
 
 The test suite includes:
 - **Unit tests**: Core functionality testing
