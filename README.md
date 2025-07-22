@@ -187,7 +187,7 @@ These variables configure the MCP client's secure connection to the MCP server, 
 - `FHIR_SERVER_ACCESS_TOKEN`: The access token to use for authenticating requests to the FHIR server. If this variable is set, the server will bypass the OAuth2 authorization flow and use this token directly for all requests.
 
 
-## Integration
+## Integration with MCP Clients
 
 The FHIR MCP Server is designed for seamless integration with various MCP clients.
 
