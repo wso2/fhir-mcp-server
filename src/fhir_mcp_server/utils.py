@@ -111,6 +111,7 @@ async def get_capability_statement(metadata_url: str) -> Dict[str, Any]:
     Discover CapabilityStatement from server's metadata endpoint.
     """
     try:
+        logger.debug(f"Fetching CapabilityStatement from {metadata_url}")
         async with create_mcp_http_client() as client:
             response = await client.get(url=metadata_url, headers=get_default_headers())
             response.raise_for_status()
@@ -126,3 +127,35 @@ async def get_capability_statement(metadata_url: str) -> Dict[str, Any]:
 
 def get_default_headers() -> Dict[str, str]:
     return {"Accept": "application/fhir+json", "Content-Type": "application/fhir+json"}
+
+
+def build_user_profile(resource: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Build user profile dictionary from FHIR resource.
+
+    Args:
+        resource: The FHIR resource dictionary of the user.
+
+    Returns:
+        Dict containing only mandatory user fields
+    """
+
+    # Define fields to extract from the resource
+    fields_to_extract = [
+        "id",
+        "resourceType",
+        "name",
+        "gender",
+        "birthDate",
+        "telecom",
+        "address",
+    ]
+
+    profile: Dict[str, Any] = {}
+    # Add fields only if they exist and have values
+    for field in fields_to_extract:
+        value = resource.get(field)
+        if value is not None:
+            profile[field] = value
+
+    return profile

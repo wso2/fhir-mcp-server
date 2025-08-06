@@ -14,8 +14,15 @@
 # specific language governing permissions and limitations
 # under the License.
 
+import base64
+import json
+import logging
+
+from typing import Any, Dict
 from pydantic import AnyHttpUrl, BaseModel
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+logger = logging.getLogger(__name__)
 
 
 class ServerConfigs(BaseSettings):
@@ -39,7 +46,7 @@ class ServerConfigs(BaseSettings):
     server_client_id: str = ""
     server_client_secret: str = ""
     server_scopes: str = ""
-    server_base_url: str = ""
+    server_base_url: str
     server_access_token: str | None = None
 
     def callback_url(
@@ -59,7 +66,11 @@ class ServerConfigs(BaseSettings):
     def scopes(self) -> list[str]:
         # If the raw value is a string, split on empty spaces
         if isinstance(self.server_scopes, str):
-            return [scope.strip() for scope in self.server_scopes.split(" ") if scope.strip()]
+            return [
+                scope.strip()
+                for scope in self.server_scopes.split(" ")
+                if scope.strip()
+            ]
         return [self.server_scopes]
 
     @property
@@ -110,10 +121,27 @@ class OAuthToken(BaseModel):
     scope: str | None = None
     refresh_token: str | None = None
     expires_at: float | None = None
+    id_token: str | None = None
+    client_id: str | None = None
 
     @property
     def scopes(self) -> list[str]:
         return self.scope.split(" ") if self.scope else []
+
+    def get_id_token(self) -> "IDToken | None":
+        """
+        Parse the id_token and return an IDToken object.
+
+        Returns:
+            An IDToken instance populated from the JWT payload or None if parsing fails.
+        """
+        payload: Dict[str, Any] | None = (
+            decode_jws(self.id_token) if self.id_token else None
+        )
+        if not payload:
+            return None
+
+        return IDToken.model_validate(payload)
 
 
 class AuthorizationCode(BaseModel):
@@ -125,3 +153,65 @@ class AuthorizationCode(BaseModel):
     code_challenge: str
     redirect_uri: AnyHttpUrl
     redirect_uri_provided_explicitly: bool
+
+
+class IDToken(BaseModel):
+    fhirUser: str | None = None
+
+    def parse_fhir_user(self) -> tuple[str, str] | None:
+        """
+        Parse the fhirUser URL to extract resource type and resource ID.
+
+        The fhirUser URL MAY be absolute (e.g., https://ehr.example.org/Practitioner/123),
+        or it MAY be relative to the FHIR server base URL (e.g., Practitioner/123).
+
+        Returns:
+            A tuple of (resource_type, resource_id) if fhirUser is valid,
+            None otherwise.
+        """
+        if not self.fhirUser:
+            return None
+
+        logger.debug(f"Parsing fhirUser: {self.fhirUser}")
+        parts: list[str] = self.fhirUser.rstrip('/').split("/")
+
+        if len(parts) < 2:
+            return None
+
+        return parts[len(parts) - 2], parts[len(parts) - 1]
+
+    @property
+    def resource_type(self) -> str | None:
+        """Get the FHIR resource type from fhirUser URL."""
+        parsed = self.parse_fhir_user()
+        return parsed[0] if parsed else None
+
+    @property
+    def resource_id(self) -> str | None:
+        """Get the FHIR resource ID from fhirUser URL."""
+        parsed = self.parse_fhir_user()
+        return parsed[1] if parsed else None
+
+
+def decode_jws(jws: str) -> Dict[str, Any] | None:
+    """
+    Decode the provided JWS payload.
+
+    Returns:
+        The decoded JWS payload as a dictionary.
+    """
+    try:
+        parts: list[str] = jws.split(".")
+        if len(parts) != 3:
+            logger.debug(
+                f"Decoding JWS failed: Invalid JWS format, expected 3 parts but got {len(parts)}: {jws}"
+            )
+            return None
+
+        padded: str = parts[1] + "=" * (4 - len(parts[1]) % 4)
+        decoded: bytes = base64.urlsafe_b64decode(padded)
+        return json.loads(decoded)
+
+    except Exception as e:
+        logger.exception("Error decoding JWS token. Caused by, ", exc_info=e)
+        return None

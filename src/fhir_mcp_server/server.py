@@ -18,6 +18,7 @@ import click
 import logging
 
 from fhir_mcp_server.utils import (
+    build_user_profile,
     create_async_fhir_client,
     get_bundle_entries,
     get_default_headers,
@@ -62,17 +63,27 @@ async def get_user_access_token(click_ctx: click.Context) -> OAuthToken | None:
     """
     if configs.server_access_token:
         logger.debug("Using configured FHIR access token for user.")
-        return OAuthToken(access_token=configs.server_access_token, token_type="Bearer")
-    
-    user_token: AccessToken | None = get_access_token()
-    if not user_token:
-        logger.error("Failed to obtain client access token.")
-        raise ValueError("Failed to obtain client access token.")
+        return OAuthToken(
+            access_token=configs.server_access_token,
+            token_type="Bearer",
+            client_id=configs.server_client_id,
+        )
 
+    user_token: AccessToken | None = get_access_token()
     logger.debug("Obtained client access token from context.")
 
     # Return the FHIR access token
-    return user_token
+    return (
+        OAuthToken(
+            access_token=user_token.token,
+            client_id=configs.server_client_id,
+            token_type="Bearer",
+            expires_at=user_token.expires_at,
+            scope=" ".join(user_token.scopes),
+        )
+        if user_token
+        else None
+    )
 
 
 @click.pass_context
@@ -86,17 +97,15 @@ async def get_async_fhir_client(click_ctx: click.Context) -> AsyncFHIRClient:
         "extra_headers": get_default_headers(),
     }
 
-    disable_auth: bool = (
-        click_ctx.obj.get("disable_auth") if click_ctx.obj else False
-    )
-    if not disable_auth:
-        user_token: AccessToken | None = await get_user_access_token()
-        if not user_token:
+    user_token: OAuthToken | None = await get_user_access_token()
+    disable_auth: bool = click_ctx.obj.get("disable_auth") if click_ctx.obj else False
+    if not user_token:
+        if not disable_auth:
             logger.error("User is not authenticated.")
             raise ValueError("User is not authenticated.")
-        client_kwargs["access_token"] = user_token.token
     else:
-        logger.debug("FHIR authentication is disabled.")
+        client_kwargs["access_token"] = user_token.access_token
+
     return await create_async_fhir_client(**client_kwargs)
 
 
@@ -205,9 +214,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
     ]:
         try:
             logger.debug(f"Invoked with resource_type='{type}'")
-            data: Dict[str, Any] = await get_capability_statement(
-                configs.metadata_url
-            )
+            data: Dict[str, Any] = await get_capability_statement(configs.metadata_url)
             for resource in data["rest"][0]["resource"]:
                 if resource.get("type") == type:
                     logger.info(
@@ -690,6 +697,89 @@ def register_mcp_tools(mcp: FastMCP) -> None:
             )
         return await get_operation_outcome_exception()
 
+    @mcp.tool(
+        description=(
+            "Retrieves the authenticated user's FHIR profile. "
+            "Use this tool when you need to access the current user's demographic and contact details."
+        )
+    )
+    async def get_user() -> Annotated[
+        list[Dict[str, Any]] | Dict[str, Any],
+        Field(
+            description="A dictionary containing the authenticated user's demographic information such as 'id', 'name', and 'birthDate'."
+        ),
+    ]:
+        try:
+            logger.debug("Retrieving authenticated user's profile.")
+
+            # Validate user authentication
+            user_token = await get_user_access_token()
+            if not user_token:
+                logger.debug("Unauthorized access attempt to get_me endpoint.")
+                return {}
+
+            # Retrieve token metadata
+            token_metadata = server_provider.token_metadata_mapping.get(
+                user_token.access_token
+            )
+            if not token_metadata:
+                logger.debug("Token metadata not found for authenticated user.")
+                return {}
+
+            # Extract ID token information
+            id_token = token_metadata.get_id_token()
+            if not id_token:
+                logger.debug("ID token not found in token metadata.")
+                return {}
+
+            # Validate resource identifiers
+            resource_id = id_token.resource_id
+            resource_type = id_token.resource_type
+
+            if not resource_id or not resource_type:
+                logger.debug("Resource ID or type missing from ID token.")
+                return {}
+
+            logger.debug(f"Fetching FHIR resource: {resource_type}/{resource_id}")
+
+            # Fetch user's FHIR resource
+            client: AsyncFHIRClient = await get_async_fhir_client()
+            resource: Dict[str, Any] = await client.get(
+                resource_type_or_resource_or_ref=resource_type, id_or_ref=resource_id
+            )
+
+            # Build response with only available fields
+            profile: Dict[str, Any] = build_user_profile(resource)
+
+            logger.debug(
+                f"Successfully retrieved profile for user: {resource_type}/{resource_id}"
+            )
+            return profile
+
+        except ValueError as ex:
+            logger.exception(
+                "Authorization error occurred while reading user resource. Caused by, ",
+                exc_info=ex,
+            )
+            return await get_operation_outcome(
+                code="forbidden",
+                diagnostics="The user does not have the rights to perform read operations.",
+            )
+
+        except OperationOutcome as ex:
+            logger.exception(
+                f"FHIR server error occurred while reading user resource. Caused by, ",
+                exc_info=ex,
+            )
+            return ex.resource.get("issue") or await get_operation_outcome_exception()
+
+        except Exception as ex:
+            logger.exception(
+                "Unexpected error occurred while reading user resource. Caused by, ",
+                exc_info=ex,
+            )
+        return await get_operation_outcome_exception()
+
 
 @click.command()
 @click.option(
@@ -714,9 +804,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
     help="Disable authorization between MCP client and MCP server. [default: False]",
 )
 @click.pass_context
-def main(
-    click_ctx: click.Context, transport, log_level, disable_auth
-) -> int:
+def main(click_ctx: click.Context, transport, log_level, disable_auth) -> int:
     """
     FHIR MCP Server - helping you expose any FHIR Server or API as a MCP Server.
     """
@@ -731,9 +819,7 @@ def main(
     try:
         mcp: FastMCP = configure_mcp_server(disable_auth)
         register_mcp_tools(mcp=mcp)
-        register_mcp_routes(
-            mcp=mcp, server_provider=server_provider
-        )
+        register_mcp_routes(mcp=mcp, server_provider=server_provider)
         logger.info(f"Starting FHIR MCP server with {transport} transport")
         mcp.run(transport=transport)
     except Exception as ex:

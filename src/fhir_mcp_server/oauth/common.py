@@ -69,26 +69,6 @@ def get_endpoint(metadata, endpoint: str) -> str:
     return str(value)
 
 
-def handle_successful_authentication() -> HTMLResponse:
-    return HTMLResponse(
-        f"""
-        <!DOCTYPE html>
-        <html>
-            <head>
-                <title>FHIR MCP Server | Authentication Complete</title>
-            </head>
-            <body style="font-family:Arial,sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#F5F5F5;">
-                <div style="text-align:center;padding:20px;background:#E5F5E0;border-radius:8px;box-shadow:0 2px 4px rgba(0,0,0,0.1);width:400px;">
-                    <h2 style="color:#000000;margin:0 0 16px;">Authentication Successful!</h2>
-                    <p style="color:#000000;margin:0 0 20px;">You can close this window and return to the application.</p>
-                </div>
-                <script>setTimeout(() => window.close(), 2000);</script>
-            </body>
-        </html>
-        """
-    )
-
-
 def handle_failed_authentication(error_desc: str = "") -> HTMLResponse:
     return HTMLResponse(
         f"""
@@ -141,6 +121,9 @@ async def perform_token_flow(
                 data=data,
                 headers=headers,
                 timeout=timeout,
+            )
+            logger.debug(
+                f"Token endpoint response: {response.status_code} - {response.text}"
             )
 
             if response.status_code != 200:
