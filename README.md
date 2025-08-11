@@ -379,7 +379,7 @@ These variables configure the MCP client's secure connection to the MCP server, 
 - `FHIR_SERVER_CLIENT_ID`: The OAuth2 client ID used to authorize MCP clients with the FHIR server.
 - `FHIR_SERVER_CLIENT_SECRET`: The client secret corresponding to the FHIR client ID. Used during token exchange.
 - `FHIR_SERVER_BASE_URL`: The base URL of the FHIR server (e.g., `https://hapi.fhir.org/baseR4`). This is used to generate tool URIs and to route FHIR requests.
-- `FHIR_SERVER_SCOPES`: A space-separated list of OAuth2 scopes to request from the FHIR authorization server (e.g., `user/Patient.read user/Observation.read`).
+- `FHIR_SERVER_SCOPES`: A space-separated list of OAuth2 scopes to request from the FHIR authorization server (e.g., `user/Patient.read user/Observation.read`). Add `fhirUser openid` to enable retrieval of user context for the `get_user` tool. If these two scopes are not configured, the `get_user` tool returns an empty result because the ID token lacks the user's FHIR resource reference.
 - `FHIR_SERVER_ACCESS_TOKEN`: The access token to use for authenticating requests to the FHIR server. If this variable is set, the server will bypass the OAuth2 authorization flow and use this token directly for all requests.
 
 ## Tools
@@ -415,6 +415,8 @@ These variables configure the MCP client's secure connection to the MCP server, 
     - `id`: The logical ID of a specific FHIR resource instance.
     - `searchParam`: A mapping of FHIR search parameter names to their desired values (e.g., {"category":"laboratory","issued:"2025-05-01"}).
     - `operation`: The name of a custom FHIR operation or extended query defined for the resource (e.g., "$expand").
+
+- `get_user`: Retrieves the currently authenticated user's FHIR resource (for example the linked `Patient` resource) and returns a concise profile containing available demographic fields such as `id`, `name`, and `birthDate`.
 
 ## Development & Testing
 
