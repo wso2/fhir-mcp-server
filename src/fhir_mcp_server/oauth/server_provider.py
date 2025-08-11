@@ -56,7 +56,7 @@ class OAuthServerProvider(OAuthAuthorizationServerProvider):
         self.auth_code_mapping: Dict[str, AuthorizationCode] = {}
         self.token_mapping: Dict[str, AccessToken | RefreshToken] = {}
         self.state_mapping: Dict[str, Dict[str, str]] = {}
-
+        self.token_metadata_mapping: Dict[str, OAuth2Token] = {}
         self._metadata: OAuthMetadata | None = None
 
     async def initialize(self) -> None:
@@ -69,6 +69,7 @@ class OAuthServerProvider(OAuthAuthorizationServerProvider):
 
     async def register_client(self, client_info: OAuthClientInformationFull):
         """Register a new OAuth client."""
+        client_info.client_id = f"fhir_mcp_{client_info.client_id}"
         self.clients[client_info.client_id] = client_info
 
     async def authorize(
@@ -203,6 +204,8 @@ class OAuthServerProvider(OAuthAuthorizationServerProvider):
                 expires_at=int(token.expires_at or 3600),
             )
 
+        self.token_metadata_mapping[token.access_token] = token
+
         return OAuthToken(
             access_token=mcp_access_token,
             refresh_token=mcp_refresh_token,
@@ -279,6 +282,8 @@ class OAuthServerProvider(OAuthAuthorizationServerProvider):
                 expires_at=int(new_token.expires_at or 3600),
                 client_id=client.client_id,
             )
+
+        self.token_metadata_mapping[new_token.access_token] = new_token
 
         return OAuthToken(
             access_token=mcp_access_token,
