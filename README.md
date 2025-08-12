@@ -39,13 +39,13 @@ The FHIR MCP Server is a Model Context Protocol (MCP) server that provides seaml
 
 This video showcases the MCP server's functionality when connected to a public [HAPI FHIR server](https://hapi.fhir.org/). This example showcases direct interaction with an open FHIR server that does not require an authorization flow.
 
-https://github.com/user-attachments/assets/899874d6-df6f-4400-9d72-0682e225abbd
+https://github.com/user-attachments/assets/cc6ac87e-8329-4da4-a090-2d76564a3abf
 
 ### Demo with EPIC Sandbox
 
 This video showcases the MCP server's capabilities within the [Epic EHR ecosystem](https://open.epic.com/). It demonstrates the complete OAuth 2.0 Authorization Code Grant flow.
 
-https://github.com/user-attachments/assets/f73a3666-b291-4ede-a253-ea7aaf405c12
+https://github.com/user-attachments/assets/96b433f1-3e53-4564-8466-65ab48d521de
 
 ## Core Features
 
