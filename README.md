@@ -63,7 +63,7 @@ https://github.com/user-attachments/assets/96b433f1-3e53-4564-8466-65ab48d521de
 
 ## Installation
 
-You can use the FHIR MCP Server by installing our Python package, by cloning this repository or by running as a docker container.
+You can use the FHIR MCP Server by installing our Python package, or by cloning this repository.
 
 ### Installing using PyPI Package
 
