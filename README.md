@@ -15,7 +15,7 @@
 - [Installation](#installation)
     - [Installing using PyPI Package](#installing-using-pypi-package)
     - [Installing from Source](#installing-from-source)
-    - [Installing using Docker](#installing-using-docker)
+    <!-- - [Installing using Docker](#installing-using-docker) -->
 - [Integration with MCP Clients](#integration-with-mcp-clients)
     - [VS Code](#vs-code)
     - [Claude Desktop](#claude-desktop)
@@ -63,7 +63,7 @@ https://github.com/user-attachments/assets/96b433f1-3e53-4564-8466-65ab48d521de
 
 ## Installation
 
-You can use the FHIR MCP Server by installing our Python package, by cloning this repository or by running as a docker container.
+You can use the FHIR MCP Server by installing our Python package, or by cloning this repository.
 
 ### Installing using PyPI Package
 
@@ -128,7 +128,7 @@ You can use the FHIR MCP Server by installing our Python package, by cloning thi
     uv run fhir-mcp-server
     ```
 
-### Installing using Docker
+<!-- ### Installing using Docker
 
 You can run the MCP server using Docker for a consistent, isolated environment. 
 
@@ -155,7 +155,7 @@ You can run the MCP server using Docker for a consistent, isolated environment.
     docker run --env-file .env -p 8000:8000 fhir-mcp-server
     ```
 
-    This will start the server and expose it on port 8000. Adjust the port mapping as needed.
+    This will start the server and expose it on port 8000. Adjust the port mapping as needed. -->
 
 ## Integration with MCP Clients
 
