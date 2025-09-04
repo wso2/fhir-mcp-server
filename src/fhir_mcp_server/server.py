@@ -290,7 +290,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
             async_resources: list[Any] = (
                 await client.resources(type).search(Raw(**searchParam)).fetch_raw()
             )
-            logger.debug("Async resources fetched:", async_resources)  # Debugging line
+            logger.debug("Async resources fetched:", async_resources) 
             return async_resources
         except ValueError as ex:
             logger.exception(

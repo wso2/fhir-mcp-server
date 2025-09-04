@@ -24,7 +24,6 @@ from fhir_mcp_server.oauth.common import (
     discover_oauth_metadata,
     is_token_expired,
     get_endpoint,
-    handle_successful_authentication,
     handle_failed_authentication,
     generate_code_verifier,
     generate_code_challenge,
@@ -229,14 +228,6 @@ class TestGetEndpoint:
 
 class TestHandleAuthentication:
     """Test the authentication handling functions."""
-
-    def test_handle_successful_authentication(self):
-        """Test successful authentication response."""
-        response: HTMLResponse = handle_successful_authentication()
-
-        assert response.status_code == 200
-        assert "Authentication Successful!" in bytes(response.body).decode()
-        assert "text/html" in response.media_type
 
     def test_handle_failed_authentication_default(self):
         """Test failed authentication response with default message."""

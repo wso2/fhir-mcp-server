@@ -105,11 +105,11 @@ class TestOAuthServerProvider:
 
         # Retrieve client
         retrieved_client: OAuthClientInformationFull | None = await provider.get_client(
-            "test_client_id"
+            "fhir_mcp_test_client_id"
         )
         assert retrieved_client is not None
         assert retrieved_client == client_info
-        assert retrieved_client.client_id == "test_client_id"
+        assert retrieved_client.client_id == "fhir_mcp_test_client_id"
 
         # Test non-existent client
         non_existent = await provider.get_client("non_existent")
