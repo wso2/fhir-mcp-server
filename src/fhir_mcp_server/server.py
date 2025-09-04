@@ -287,13 +287,11 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                 return await get_operation_outcome_required_error("type")
 
             client: AsyncFHIRClient = await get_async_fhir_client()
-            async_resources: list[AsyncFHIRResource] = (
-                await client.resources(type).search(Raw(**searchParam)).fetch()
+            async_resources: list[Any] = (
+                await client.resources(type).search(Raw(**searchParam)).fetch_raw()
             )
-            resources: list[Dict[str, Any]] = []
-            for async_resource in async_resources:
-                resources.append(async_resource.serialize())
-            return resources
+            logger.debug("Async resources fetched:", async_resources) 
+            return async_resources
         except ValueError as ex:
             logger.exception(
                 f"User does not have permission to perform FHIR '{type}' resource search operation. Caused by, ",

@@ -135,12 +135,44 @@ async def test_tool_search(mcp_server, patient_id):
             response: Dict = await extract_resource(tool_result)
             assert (
                 response is not None
-                and response.get("resourceType") == "Patient"
-                and response.get("id") == patient_id
+                and response.get("entry")[0].get("resource").get("resourceType") == "Patient"
+                and response.get("entry")[0].get("resource").get("id") == patient_id
             ), f"No Patient resource in read result: {response}"
     except asyncio.TimeoutError as ex:
         logger.error(
             "[TOOL RESPONSE] Timeout waiting for search response from MCP server",
+            exc_info=ex,
+        )
+        raise
+
+
+@pytest.mark.asyncio
+async def test_tool_search_condition_count(mcp_server):
+    request_payload = {
+        "type": "Condition",
+        "searchParam": {
+            "code": "http://snomed.info/sct|204256004",
+            "_summary": "count",
+            "_total": "estimate"
+        }
+    }
+    logger.info("[TEST REQUEST] search Condition count:", request_payload)
+    try:
+        async with create_mcp_session() as mcp_session:
+            tool_result: types.CallToolResult = await mcp_session.call_tool(
+                name="search", arguments=request_payload
+            )
+            response: Dict = await extract_resource(tool_result)
+            assert response.get("resourceType") == "Bundle", f"Not a Bundle: {response}"
+            assert response.get("type") == "searchset", f"Not a searchset: {response}"
+            assert "total" in response, f"No total count in response: {response}"
+            assert isinstance(response["total"], int), f"Total is not int: {response}"
+            # Optionally check for SUBSETTED tag
+            tags = response.get("meta", {}).get("tag", [])
+            assert any(tag.get("code") == "SUBSETTED" for tag in tags), f"Missing SUBSETTED tag: {tags}"
+    except asyncio.TimeoutError as ex:
+        logger.error(
+            "[TOOL RESPONSE] Timeout waiting for Condition count search response from MCP server",
             exc_info=ex,
         )
         raise

@@ -46,7 +46,7 @@ class ServerConfigs(BaseSettings):
     server_client_id: str = ""
     server_client_secret: str = ""
     server_scopes: str = ""
-    server_base_url: str
+    server_base_url: str = ""
     server_access_token: str | None = None
 
     def callback_url(
