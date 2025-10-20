@@ -9,31 +9,43 @@
 #
 # ----------------------------------------------------------------------------------------
 
-FROM python:3.11-slim
-
-# Install uv (for fast dependency management)
-RUN pip install --upgrade pip
-
-# Set workdir
+# Builder
+FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS builder
 WORKDIR /app
 
-# Copy only requirements first for better caching
-COPY requirements.txt ./
-RUN pip install -r requirements.txt
+# Install git, clone, and cleanup in one layer
+RUN apt-get update && apt-get install -y --no-install-recommends git && \
+    git clone https://github.com/wso2/fhir-mcp-server.git . && \
+    apt-get purge -y --auto-remove git && \
+    rm -rf /var/lib/apt/lists/* /app/.git
 
-# Copy the rest of the code
-COPY . .
+# Create venv and install in one layer
+ENV VIRTUAL_ENV=/opt/venv
+ENV PATH="${VIRTUAL_ENV}/bin:${PATH}"
+RUN uv venv /opt/venv && \
+    uv pip sync requirements.txt && \
+    uv pip install .
 
-# Create a non-root user with UID 10001 and switch to it
+# Runtime
+FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    VIRTUAL_ENV=/opt/venv \
+    PATH="/opt/venv/bin:${PATH}" \
+    FHIR_MCP_HOST=0.0.0.0 \
+    FHIR_MCP_PORT=8000 \
+    FHIR_MCP_REQUEST_TIMEOUT=30 \
+    FHIR_SERVER_BASE_URL=http://localhost:8080/fhir
+
+WORKDIR /app
+
+# Use --link for better caching
+COPY --from=builder --link /opt/venv /opt/venv
+COPY --from=builder --link /app /app
+
 RUN useradd -m -u 10001 appuser
 USER 10001
 
-# Expose default port
 EXPOSE 8000
-
-# Set environment variables (can be overridden at runtime)
-ENV PYTHONUNBUFFERED=1
-ENV PYTHONPATH=/app/src
-
-# Default command to run the server (can be overridden)
-CMD ["python", "-m", "fhir_mcp_server"]
+CMD ["fhir-mcp-server", "--transport", "streamable-http", "--log-level", "INFO", "--disable-auth"]
