@@ -1,0 +1,32 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json",
+  "name": "io.github.wso2/fhir-mcp-server",
+  "title": "FHIR MCP Server",
+  "description": "MCP server providing seamless access to FHIR APIs for AI tools and healthcare applications",
+  "websiteUrl": "https://github.com/wso2/fhir-mcp-server",
+  "repository": {
+    "url": "https://github.com/wso2/fhir-mcp-server",
+    "source": "github"
+  },
+  "version": "0.9.0",
+  "packages": [
+    {
+      "registryType": "pypi",
+      "registryBaseUrl": "https://pypi.org",
+      "identifier": "fhir-mcp-server",
+      "version": "0.9.0",
+      "runtimeHint": "uvx",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "FHIR_SERVER_BASE_URL",
+          "description": "Base URL of the FHIR Server (eg: https://hapi.fhir.org/baseR5)",
+          "isRequired": true,
+          "isSecret": false
+        }
+      ]
+    }
+  ]
+}

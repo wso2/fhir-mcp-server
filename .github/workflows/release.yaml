@@ -267,3 +267,84 @@ jobs:
             --verify-tag
             
           echo "✓ GitHub release created successfully"
+
+  publish_mcp_registry:
+    name: Publish to MCP Registry
+    needs: [pypi_publish, details]
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write  # Required for OIDC authentication
+      contents: read   # Required for checkout
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Update server.json version
+        run: |
+          set -euo pipefail
+          
+          # Extract version from tag (remove 'v' prefix if present)
+          VERSION=${GITHUB_REF#refs/tags/}
+          VERSION=${VERSION#v}
+          
+          echo "Updating server.json version to $VERSION"
+          
+          # Use jq to update both version fields in server.json
+          jq --arg v "$VERSION" '.version = $v | .packages[0].version = $v' server.json > tmp && mv tmp server.json
+          
+          # Verify the changes
+          if ! jq -e --arg v "$VERSION" '.version == $v and .packages[0].version == $v' server.json > /dev/null; then
+            echo "Error: Failed to update version in server.json"
+            exit 1
+          fi
+          
+          echo "✓ server.json version updated successfully to $VERSION"
+          echo "Updated server.json:"
+          cat server.json
+
+      - name: Install MCP Publisher
+        run: |
+          set -euo pipefail
+          
+          echo "Installing MCP Publisher..."
+          curl -L "https://github.com/modelcontextprotocol/registry/releases/download/latest/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
+          chmod +x mcp-publisher
+          
+          echo "✓ MCP Publisher installed successfully"
+
+      - name: Login to MCP Registry
+        run: |
+          set -euo pipefail
+          
+          echo "Authenticating with MCP Registry using GitHub OIDC..."
+          ./mcp-publisher login github-oidc
+          
+          echo "✓ Successfully authenticated with MCP Registry"
+
+      - name: Publish to MCP Registry
+        run: |
+          set -euo pipefail
+          
+          echo "Publishing to MCP Registry..."
+          ./mcp-publisher publish
+          
+          echo "✓ Successfully published to MCP Registry"
+
+      - name: Verify Publication
+        run: |
+          set -euo pipefail
+          
+          echo "Verifying publication in MCP Registry..."
+          sleep 10  # Wait for registry to process
+          
+          # Check if the server appears in the registry
+          if curl -s "https://registry.modelcontextprotocol.io/v0/servers?search=io.github.wso2/fhir-mcp-server" | grep -q "fhir-mcp-server"; then
+            echo "✓ Server successfully published and appears in MCP Registry"
+          else
+            echo "⚠️  Server may still be processing in MCP Registry (this can take a few minutes)"
+          fi
