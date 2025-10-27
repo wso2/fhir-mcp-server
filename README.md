@@ -482,6 +482,8 @@ Coverage reports are generated in `htmlcov/index.html` for detailed analysis.
 
 You can run the MCP server using Docker for a consistent, isolated environment.
 
+Note on **Authorization**: When running the MCP server locally via Docker or Docker Compose, authorization should be disabled by adding ```--disable-auth```. This would be fixed in the future releases.
+
 1. **Prerequisites:**
    - Docker installed and running on your system.
 
