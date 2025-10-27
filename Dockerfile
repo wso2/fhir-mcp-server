@@ -14,10 +14,7 @@ FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS builder
 WORKDIR /app
 
 # Install git, clone, and cleanup in one layer
-RUN apt-get update && apt-get install -y --no-install-recommends git && \
-    git clone https://github.com/wso2/fhir-mcp-server.git . && \
-    apt-get purge -y --auto-remove git && \
-    rm -rf /var/lib/apt/lists/* /app/.git
+COPY . .
 
 # Create venv and install in one layer
 ENV VIRTUAL_ENV=/opt/venv
