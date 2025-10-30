@@ -205,7 +205,7 @@ The FHIR MCP Server is designed for seamless integration with various MCP client
 [![Install in VS Code](https://img.shields.io/badge/VS_Code-Install_Server-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=fhir&config=%7B%22type%22%3A%22http%22%2C%22url%22%3A%22http%3A%2F%2Flocalhost%3A8000%2Fmcp%2F%22%7D)
 [![Install in VS Code Insiders](https://img.shields.io/badge/VS_Code_Insiders-Install_Server-24bfa5?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=fhir&config=%7B%22type%22%3A%22http%22%2C%22url%22%3A%22http%3A%2F%2Flocalhost%3A8000%2Fmcp%2F%22%7D)
 
-Add the following JSON block to your User Settings (JSON) file in VS Code (> V1.101). You can do this by pressing Ctrl + Shift + P and typing Preferences: Open User Settings (JSON).
+Add the following JSON block to your MCP configuration file in VS Code (> V1.104). You can do this by pressing Ctrl + Shift + P and typing `MCP: Open User Configuration`.
 
 <table>
 <tr><th>Streamable HTTP</th><th>STDIO</th><th>SSE</th></tr>
@@ -213,11 +213,31 @@ Add the following JSON block to your User Settings (JSON) file in VS Code (> V1.
 <td>
 
 ```json
-"mcp": {
-    "servers": {
-        "fhir": {
-            "type": "http",
-            "url": "http://localhost:8000/mcp",
+"servers": {
+    "fhir": {
+        "type": "http",
+        "url": "http://localhost:8000/mcp",
+    }
+}
+```
+</td>
+
+<td>
+
+```json
+"servers": {
+    "fhir": {
+        "command": "uv",
+        "args": [
+            "--directory",
+            "/path/to/fhir-mcp-server",
+            "run",
+            "fhir-mcp-server",
+            "--transport",
+            "stdio"
+        ],
+        "env": {
+            "FHIR_SERVER_ACCESS_TOKEN": "Your FHIR Access Token"
         }
     }
 }
@@ -227,36 +247,10 @@ Add the following JSON block to your User Settings (JSON) file in VS Code (> V1.
 <td>
 
 ```json
-"mcp": {
-    "servers": {
-        "fhir": {
-            "command": "uv",
-            "args": [
-                "--directory",
-                "/path/to/fhir-mcp-server",
-                "run",
-                "fhir-mcp-server",
-                "--transport",
-                "stdio"
-            ],
-            "env": {
-                "FHIR_SERVER_ACCESS_TOKEN": "Your FHIR Access Token"
-            }
-        }
-    }
-}
-```
-</td>
-
-<td>
-
-```json
-"mcp": {
-    "servers": {
-        "fhir": {
-            "type": "sse",
-            "url": "http://localhost:8000/sse",
-        }
+"servers": {
+    "fhir": {
+        "type": "sse",
+        "url": "http://localhost:8000/sse",
     }
 }
 ```
