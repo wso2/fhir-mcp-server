@@ -13,7 +13,7 @@
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS builder
 WORKDIR /app
 
-# Install git, clone, and cleanup in one layer
+# Copy source
 COPY . .
 
 # Create venv and install in one layer
@@ -44,4 +44,4 @@ RUN useradd -m -u 10001 appuser
 USER 10001
 
 EXPOSE 8000
-CMD ["fhir-mcp-server", "--transport", "streamable-http", "--log-level", "INFO", "--disable-auth"]
+CMD ["fhir-mcp-server", "--transport", "streamable-http", "--log-level", "INFO"]

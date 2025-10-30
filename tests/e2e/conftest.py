@@ -42,10 +42,11 @@ async def mcp_server() -> AsyncGenerator[bool, Any]:
     env["FHIR_SERVER_BASE_URL"] = "https://hapi.fhir.org/baseR4"
     env["FHIR_MCP_HOST"] = "localhost"
     env["FHIR_MCP_PORT"] = "8001"
+    env["FHIR_SERVER_DISABLE_AUTHORIZATION"] = "True"
 
-    logger.info("Starting MCP server with: uv run fhir-mcp-server --disable-auth")
+    logger.info("Starting MCP server with: uv run fhir-mcp-server")
     process = subprocess.Popen(
-        ["uv", "run", "fhir-mcp-server", "--disable-auth"],
+        ["uv", "run", "fhir-mcp-server"],
         env=env,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,

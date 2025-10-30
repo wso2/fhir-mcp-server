@@ -31,13 +31,14 @@ services:
       - hapi-fhir_network
   fhir-mcp-server:
     build: . 
-    image: fhir-mcp-server:latest
+    image: docker.io/wso2/fhir-mcp-server:latest
     container_name: fhir-mcp-server
     environment:
       FHIR_SERVER_BASE_URL: http://hapi-r4-postgresql:8080/fhir
       FHIR_MCP_HOST: 0.0.0.0
       FHIR_MCP_PORT: "8000"
       FHIR_MCP_REQUEST_TIMEOUT: "30"
+      FHIR_SERVER_DISABLE_AUTHORIZATION: True
     ports:
       - "8000:8000"
     networks:
