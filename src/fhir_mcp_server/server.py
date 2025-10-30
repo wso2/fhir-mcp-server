@@ -96,7 +96,7 @@ async def get_async_fhir_client() -> AsyncFHIRClient:
     }
 
     user_token: OAuthToken | None = await get_user_access_token()
-    disable_auth = configs.server_disable_authorization
+    disable_auth: bool = configs.server_disable_authorization
     if not user_token:
         if not disable_auth:
             logger.error("User is not authenticated.")
