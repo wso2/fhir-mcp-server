@@ -17,6 +17,9 @@
   - [Installation](#installation)
     - [Installing using PyPI Package](#installing-using-pypi-package)
     - [Installing from Source](#installing-from-source)
+    - [Installing using Docker](#installing-using-docker)
+        - [Running the MCP Server with Docker](#running-the-mcp-server-with-docker)
+        - [Using Docker Compose with HAPI FHIR Server](#using-docker-compose-with-hapi-fhir-server)
   - [Integration with MCP Clients](#integration-with-mcp-clients)
     - [VS Code](#vs-code)
     - [Claude Desktop](#claude-desktop)
@@ -28,9 +31,6 @@
   - [Development \& Testing](#development--testing)
     - [Installing Development Dependencies](#installing-development-dependencies)
     - [Running Tests](#running-tests)
-  - [Using Docker](#using-docker)
-    - [Running the MCP Server with Docker](#running-the-mcp-server-with-docker)
-    - [Using Docker Compose with HAPI FHIR Server](#using-docker-compose-with-hapi-fhir-server)
 
 
 ## Overview
@@ -73,7 +73,7 @@ You can use the FHIR MCP Server by installing our Python package, or by cloning 
 
 1. **Configure Environment Variables:**
 
-    To run the server, you must set `FHIR_SERVER_BASE_URL`. If you plan to use authorization, you'll also need to configure `FHIR_SERVER_CLIENT_ID`, `FHIR_SERVER_CLIENT_SECRET`, and `FHIR_SERVER_SCOPES`. By default, the MCP server will listen on http://localhost:8000. You can customize the host and port by setting `FHIR_MCP_HOST` and `FHIR_MCP_PORT` respectively.
+    To run the server, you must set `FHIR_SERVER_BASE_URL`. FHIR server authorization is enabled by default. To enable authorization, you'll also need to configure `FHIR_SERVER_CLIENT_ID`, `FHIR_SERVER_CLIENT_SECRET`, and `FHIR_SERVER_SCOPES`. If you plan to **disable authorization**, `FHIR_SERVER_DISABLE_AUTHORIZATION` to `True`. By default, the MCP server will listen on http://localhost:8000. You can customize the host and port by setting `FHIR_MCP_HOST` and `FHIR_MCP_PORT` respectively.
 
     You can set these by exporting them as environment variables like below or by creating a `.env` file (referencing `.env.example`).
 
@@ -89,13 +89,6 @@ You can use the FHIR MCP Server by installing our Python package, or by cloning 
 
 2. **Install the PyPI package and run the server**
 
-    If you are exposing a FHIR server with no security:
-
-    ```bash
-    uvx fhir-mcp-server --disable-auth
-    ```
-
-    else;
     ```bash
     uvx fhir-mcp-server
     ```
@@ -132,9 +125,13 @@ You can use the FHIR MCP Server by installing our Python package, or by cloning 
     uv run fhir-mcp-server
     ```
 
-<!-- ### Installing using Docker
+### Installing using Docker
+
+#### Running the MCP Server with Docker
 
 You can run the MCP server using Docker for a consistent, isolated environment. 
+
+>Note on **Authorization**: When running the MCP server **locally** via Docker or Docker Compose, authorization should be disabled by setting the environment variable, `FHIR_SERVER_DISABLE_AUTHORIZATION=True` . This would be fixed in the future releases.
 
 1. Build the Docker Image
 
@@ -151,7 +148,7 @@ You can run the MCP server using Docker for a consistent, isolated environment.
     # Edit .env to set your FHIR server, client credentials, etc.
     ```
 
-    Alternatively, you can pass environment variables directly with `-e` flags or use Docker secrets for sensitive values.
+    Alternatively, you can pass environment variables directly with `-e` flags or use Docker secrets for sensitive values. See the [Configuration](#configuration) section for details on available environment variables.
 
 3. Run the Container
 
@@ -159,7 +156,34 @@ You can run the MCP server using Docker for a consistent, isolated environment.
     docker run --env-file .env -p 8000:8000 fhir-mcp-server
     ```
 
-    This will start the server and expose it on port 8000. Adjust the port mapping as needed. -->
+    This will start the server and expose it on port 8000. Adjust the port mapping as needed.
+
+#### Using Docker Compose with HAPI FHIR Server
+
+For a quick setup that includes both the FHIR MCP server and a HAPI FHIR server (with PostgreSQL), use the provided `docker-compose.yml`. This sets up an instant development environment for testing FHIR operations.
+
+1. **Prerequisites:**
+   - Docker and Docker Compose installed.
+
+2. **Run the Stack:**
+
+   ```bash
+   docker-compose up -d
+   ```
+
+   This command will:
+   - Start a PostgreSQL database container.
+   - Launch the HAPI FHIR server (connected to PostgreSQL) listening on http://localhost:8080.
+   - Build and run the FHIR MCP server container listening on http://localhost:8000, with `FHIR_SERVER_BASE_URL` set to http://hapi-r4-postgresql:8080/fhir.
+
+3. **Access the Services:**
+   - FHIR MCP Server: http://localhost:8000
+   - HAPI FHIR Server: http://localhost:8080
+   - To stop run `docker-compose down`.
+
+4. **Configure Additional Environment Variables:**
+
+   If you need to customize OAuth or other settings, adjust the env variables in the `docker-compose.yml`. The compose file sets basic configuration; refer to the [Configuration](#configuration) section for full options.
 
 ## Integration with MCP Clients
 
@@ -353,11 +377,6 @@ You can customize the behavior of the MCP server using the following command-lin
     - Accepted values: DEBUG, INFO, WARN, ERROR (case-insensitive)
     - Default: INFO
 
-- **--disable-auth**
-    - Description: Disables the security of the MCP Server. Allows you to connect with openly available FHIR servers.
-    - Type: Flag (no value required)
-    - Default: False (authentication enabled)
-
 - **--help**
     - Description: Displays a help message with available server options and exits.
     - Usage: Automatically provided by the command-line interface.
@@ -365,7 +384,7 @@ You can customize the behavior of the MCP server using the following command-lin
 Sample Usages:
 
 ```shell
-uv run fhir-mcp-server --transport streamable-http --log-level DEBUG --disable-auth
+uv run fhir-mcp-server --transport streamable-http --log-level DEBUG
 uv run fhir-mcp-server --help
 ```
 
@@ -381,6 +400,7 @@ uv run fhir-mcp-server --help
 These variables configure the MCP client's secure connection to the MCP server, using the OAuth2 authorization code grant flow with a FHIR server.
 
 - `FHIR_SERVER_CLIENT_ID`: The OAuth2 client ID used to authorize MCP clients with the FHIR server.
+- `FHIR_SERVER_DISABLE_AUTHORIZATION`: If set to `True`, disables authorization checks on the MCP server, allowing connections to publicly accessible FHIR servers.
 - `FHIR_SERVER_CLIENT_SECRET`: The client secret corresponding to the FHIR client ID. Used during token exchange.
 - `FHIR_SERVER_BASE_URL`: The base URL of the FHIR server (e.g., `https://hapi.fhir.org/baseR4`). This is used to generate tool URIs and to route FHIR requests.
 - `FHIR_SERVER_SCOPES`: A space-separated list of OAuth2 scopes to request from the FHIR authorization server (e.g., `user/Patient.read user/Observation.read`). Add `fhirUser openid` to enable retrieval of user context for the `get_user` tool. If these two scopes are not configured, the `get_user` tool returns an empty result because the ID token lacks the user's FHIR resource reference.
@@ -475,61 +495,5 @@ The test suite includes:
 - **Mocked OAuth flows**: Realistic authentication testing
 
 Coverage reports are generated in `htmlcov/index.html` for detailed analysis.
-
-## Using Docker
-
-### Running the MCP Server with Docker
-
-You can run the MCP server using Docker for a consistent, isolated environment.
-
-Note on **Authorization**: When running the MCP server locally via Docker or Docker Compose, authorization should be disabled by adding ```--disable-auth```. This would be fixed in the future releases.
-
-1. **Prerequisites:**
-   - Docker installed and running on your system.
-
-2. **Build the Docker Image:**
-
-   ```bash
-   docker build -t fhir-mcp-server .
-   ```
-
-   See the [Configuration](#configuration) section for details on available environment variables.
-
-3. **Run the Container:**
-
-   ```bash
-   docker run -p 8000:8000 fhir-mcp-server
-   ```
-
-   The server will start and listen on http://localhost:8000.
-
-### Using Docker Compose with HAPI FHIR Server
-
-For a quick setup that includes both the FHIR MCP server and a HAPI FHIR server (with PostgreSQL), use the provided `docker-compose.yml`. This sets up an instant development environment for testing FHIR operations.
-
-1. **Prerequisites:**
-   - Docker and Docker Compose installed.
-
-2. **Run the Stack:**
-
-   ```bash
-   docker-compose up -d
-   ```
-
-   This command will:
-   - Start a PostgreSQL database container.
-   - Launch the HAPI FHIR server (connected to PostgreSQL) listening on http://localhost:8080.
-   - Build and run the FHIR MCP server container listening on http://localhost:8000, with `FHIR_SERVER_BASE_URL` set to http://hapi-r4-postgresql:8080/fhir.
-
-3. **Access the Services:**
-   - FHIR MCP Server: http://localhost:8000
-   - HAPI FHIR Server: http://localhost:8080
-   - To stop run `docker-compose down`.
-
-4. **Configure Additional Environment Variables:**
-
-   If you need to customize OAuth or other settings, adjust the env variables in the `docker-compose.yml`. The compose file sets basic configuration; refer to the [Configuration](#configuration) section for full options.
-
-The MCP server is now ready to connect with MCP clients like VS Code or Claude Desktop, interacting with the HAPI FHIR data.
 
 <!-- mcp-name: io.github.wso2/fhir-mcp-server -->
