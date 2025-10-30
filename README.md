@@ -6,27 +6,31 @@
 [![X](https://img.shields.io/twitter/follow/wso2.svg?style=social&label=Follow)](https://twitter.com/intent/follow?screen_name=wso2)
 
 ## Table of Contents
-- [Overview](#overview)
-- [Demo](#demo)
+- [Model Context Protocol (MCP) Server for Fast Healthcare Interoperability Resources (FHIR) APIs](#model-context-protocol-mcp-server-for-fast-healthcare-interoperability-resources-fhir-apis)
+  - [Table of Contents](#table-of-contents)
+  - [Overview](#overview)
+  - [Demo](#demo)
     - [Demo with HAPI FHIR server](#demo-with-hapi-fhir-server)
     - [Demo with EPIC Sandbox](#demo-with-epic-sandbox)
-- [Core Features](#core-features)
-- [Prerequisites](#prerequisites)
-- [Installation](#installation)
+  - [Core Features](#core-features)
+  - [Prerequisites](#prerequisites)
+  - [Installation](#installation)
     - [Installing using PyPI Package](#installing-using-pypi-package)
     - [Installing from Source](#installing-from-source)
-    <!-- - [Installing using Docker](#installing-using-docker) -->
-- [Integration with MCP Clients](#integration-with-mcp-clients)
+  - [Integration with MCP Clients](#integration-with-mcp-clients)
     - [VS Code](#vs-code)
     - [Claude Desktop](#claude-desktop)
     - [MCP Inspector](#mcp-inspector)
-- [Configuration](#configuration)
+  - [Configuration](#configuration)
     - [CLI Options](#cli-options)
     - [Environment Variables](#environment-variables)
-- [Tools](#tools)
-- [Development & Testing](#development--testing)
+  - [Tools](#tools)
+  - [Development \& Testing](#development--testing)
     - [Installing Development Dependencies](#installing-development-dependencies)
     - [Running Tests](#running-tests)
+  - [Using Docker](#using-docker)
+    - [Running the MCP Server with Docker](#running-the-mcp-server-with-docker)
+    - [Using Docker Compose with HAPI FHIR Server](#using-docker-compose-with-hapi-fhir-server)
 
 
 ## Overview
@@ -471,5 +475,61 @@ The test suite includes:
 - **Mocked OAuth flows**: Realistic authentication testing
 
 Coverage reports are generated in `htmlcov/index.html` for detailed analysis.
+
+## Using Docker
+
+### Running the MCP Server with Docker
+
+You can run the MCP server using Docker for a consistent, isolated environment.
+
+Note on **Authorization**: When running the MCP server locally via Docker or Docker Compose, authorization should be disabled by adding ```--disable-auth```. This would be fixed in the future releases.
+
+1. **Prerequisites:**
+   - Docker installed and running on your system.
+
+2. **Build the Docker Image:**
+
+   ```bash
+   docker build -t fhir-mcp-server .
+   ```
+
+   See the [Configuration](#configuration) section for details on available environment variables.
+
+3. **Run the Container:**
+
+   ```bash
+   docker run -p 8000:8000 fhir-mcp-server
+   ```
+
+   The server will start and listen on http://localhost:8000.
+
+### Using Docker Compose with HAPI FHIR Server
+
+For a quick setup that includes both the FHIR MCP server and a HAPI FHIR server (with PostgreSQL), use the provided `docker-compose.yml`. This sets up an instant development environment for testing FHIR operations.
+
+1. **Prerequisites:**
+   - Docker and Docker Compose installed.
+
+2. **Run the Stack:**
+
+   ```bash
+   docker-compose up -d
+   ```
+
+   This command will:
+   - Start a PostgreSQL database container.
+   - Launch the HAPI FHIR server (connected to PostgreSQL) listening on http://localhost:8080.
+   - Build and run the FHIR MCP server container listening on http://localhost:8000, with `FHIR_SERVER_BASE_URL` set to http://hapi-r4-postgresql:8080/fhir.
+
+3. **Access the Services:**
+   - FHIR MCP Server: http://localhost:8000
+   - HAPI FHIR Server: http://localhost:8080
+   - To stop run `docker-compose down`.
+
+4. **Configure Additional Environment Variables:**
+
+   If you need to customize OAuth or other settings, adjust the env variables in the `docker-compose.yml`. The compose file sets basic configuration; refer to the [Configuration](#configuration) section for full options.
+
+The MCP server is now ready to connect with MCP clients like VS Code or Claude Desktop, interacting with the HAPI FHIR data.
 
 <!-- mcp-name: io.github.wso2/fhir-mcp-server -->
