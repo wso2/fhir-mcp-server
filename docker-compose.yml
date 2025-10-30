@@ -31,7 +31,7 @@ services:
       - hapi-fhir_network
   fhir-mcp-server:
     build: . 
-    image: fhir-mcp-server:latest
+    image: docker.io/wso2/fhir-mcp-server:latest
     container_name: fhir-mcp-server
     environment:
       FHIR_SERVER_BASE_URL: http://hapi-r4-postgresql:8080/fhir

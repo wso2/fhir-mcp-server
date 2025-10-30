@@ -72,8 +72,14 @@ You can use the FHIR MCP Server by installing our Python package, or by cloning 
 ### Installing using PyPI Package
 
 1. **Configure Environment Variables:**
+    
+    To run the server, you must set `FHIR_SERVER_BASE_URL`.
 
-    To run the server, you must set `FHIR_SERVER_BASE_URL`. FHIR server authorization is enabled by default. To enable authorization, you'll also need to configure `FHIR_SERVER_CLIENT_ID`, `FHIR_SERVER_CLIENT_SECRET`, and `FHIR_SERVER_SCOPES`. If you plan to **disable authorization**, `FHIR_SERVER_DISABLE_AUTHORIZATION` to `True`. By default, the MCP server will listen on http://localhost:8000. You can customize the host and port by setting `FHIR_MCP_HOST` and `FHIR_MCP_PORT` respectively.
+    * **To enable authorization:** Set `FHIR_SERVER_BASE_URL`, `FHIR_SERVER_CLIENT_ID`, `FHIR_SERVER_CLIENT_SECRET`, and `FHIR_SERVER_SCOPES`. Authorization is enabled by default.
+    * **To disable authorization:** Set `FHIR_SERVER_DISABLE_AUTHORIZATION` to `True`.
+
+    By default, the MCP server runs on **[http://localhost:8000](http://localhost:8000)**, and you can customize the host and port using `FHIR_MCP_HOST` and `FHIR_MCP_PORT`.
+
 
     You can set these by exporting them as environment variables like below or by creating a `.env` file (referencing `.env.example`).
 
@@ -133,11 +139,16 @@ You can run the MCP server using Docker for a consistent, isolated environment.
 
 >Note on **Authorization**: When running the MCP server **locally** via Docker or Docker Compose, authorization should be disabled by setting the environment variable, `FHIR_SERVER_DISABLE_AUTHORIZATION=True` . This would be fixed in the future releases.
 
-1. Build the Docker Image
+1. Build the Docker Image or pull the docker image from the container registry:
 
-    ```bash
-    docker build -t fhir-mcp-server .
-    ```
+    * Build from source:
+        ```bash
+        docker build -t fhir-mcp-server .
+        ```
+    * Pull from GitHub Container Registry:
+        ```bash
+        docker pull wso2/fhir-mcp-server:latest
+        ```
 
 2. Configure Environment Variables
 
