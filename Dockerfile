@@ -10,7 +10,11 @@
 # ----------------------------------------------------------------------------------------
 
 # Builder
-FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS builder
+# Build arguments for multi-architecture support
+ARG BUILDPLATFORM
+ARG TARGETPLATFORM
+
+FROM --platform=$TARGETPLATFORM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS builder
 WORKDIR /app
 
 # Copy source
@@ -24,7 +28,7 @@ RUN uv venv /opt/venv && \
     uv pip install .
 
 # Runtime
-FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS runtime
+FROM --platform=$TARGETPLATFORM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
