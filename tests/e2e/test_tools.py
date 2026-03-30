@@ -19,6 +19,7 @@ import json
 import logging
 import pytest_asyncio
 import asyncio
+import uuid
 
 from typing import Dict
 import mcp.types as types
@@ -65,12 +66,16 @@ async def test_tool_get_capabilities(mcp_server) -> None:
 
 @pytest_asyncio.fixture
 async def patient_id(mcp_server) -> str | None:
+    suffix = uuid.uuid4().hex[:8]
     request_payload = {
         "type": "Patient",
         "payload": {
             "resourceType": "Patient",
             "gender": "male",
-            "name": {"family": "TestFamily", "given": ["TestGiven"]},
+            "name": {
+                "family": f"TestFamily-{suffix}",
+                "given": [f"TestGiven-{suffix}"],
+            },
         },
     }
     logger.debug("[TOOL REQUEST] create:", request_payload)
