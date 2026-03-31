@@ -8,13 +8,13 @@
     "url": "https://github.com/wso2/fhir-mcp-server",
     "source": "github"
   },
-  "version": "0.9.0",
+  "version": "0.10.0",
   "packages": [
     {
       "registryType": "pypi",
       "registryBaseUrl": "https://pypi.org",
       "identifier": "fhir-mcp-server",
-      "version": "0.9.0",
+      "version": "0.10.0",
       "runtimeHint": "uvx",
       "transport": {
         "type": "stdio"
