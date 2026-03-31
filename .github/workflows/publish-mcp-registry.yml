@@ -1,0 +1,120 @@
+name: publish-mcp-registry
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to publish (e.g., 0.10.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  publish_mcp_registry:
+    name: Publish to MCP Registry
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_VERSION: ${{ github.event.inputs.version }}
+    permissions:
+      id-token: write  # Required for OIDC authentication
+      contents: read   # Required for checkout
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+
+      - name: Checkout Code
+        uses: actions/checkout@v5
+
+      - name: Validate version input
+        run: |
+          set -euo pipefail
+
+          VERSION="$RELEASE_VERSION"
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([a-z]+[0-9]+)?$ ]]; then
+            echo "Error: Invalid version format: $VERSION"
+            echo "Expected examples: 0.10.0, 1.2.3rc1"
+            exit 1
+          fi
+
+      - name: Update server.json version
+        run: |
+          set -euo pipefail
+          
+          VERSION="$RELEASE_VERSION"
+          
+          echo "Updating server.json version to $VERSION"
+          
+          # Use jq to update both version fields in server.json
+          jq --arg v "$VERSION" '.version = $v | .packages[0].version = $v' server.json > tmp && mv tmp server.json
+          
+          # Verify the changes
+          if ! jq -e --arg v "$VERSION" '.version == $v and .packages[0].version == $v' server.json > /dev/null; then
+            echo "Error: Failed to update version in server.json"
+            exit 1
+          fi
+          
+          echo "✓ server.json version updated successfully to $VERSION"
+          echo "Updated server.json:"
+          cat server.json
+
+      - name: Install MCP Publisher
+        run: |
+          set -euo pipefail
+          
+          echo "Installing MCP Publisher..."
+          ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
+          OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+          BINARY_URL="https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_${OS}_${ARCH}.tar.gz"
+
+          curl -fL "$BINARY_URL" | tar xz mcp-publisher
+          chmod +x mcp-publisher
+          
+          echo "✓ MCP Publisher installed successfully"
+
+      - name: Login to MCP Registry
+        run: |
+          set -euo pipefail
+          
+          echo "Authenticating with MCP Registry using GitHub OIDC..."
+          ./mcp-publisher login github-oidc
+          
+          echo "✓ Successfully authenticated with MCP Registry"
+
+      - name: Publish to MCP Registry
+        run: |
+          set -euo pipefail
+          
+          echo "Publishing to MCP Registry..."
+          ./mcp-publisher publish
+          
+          echo "✓ Successfully published to MCP Registry"
+
+      - name: Verify Publication
+        run: |
+          set -euo pipefail
+          
+          VERSION="$RELEASE_VERSION"
+          echo "Verifying publication in MCP Registry for version $VERSION..."
+          SERVER_NAME="io.github.wso2%2Ffhir-mcp-server"
+          VERIFY_URL="https://registry.modelcontextprotocol.io/v0/servers/${SERVER_NAME}/versions/${VERSION}"
+
+          for attempt in 1 2 3 4 5 6; do
+            status_code=$(curl -s -o /tmp/mcp_verify.json -w "%{http_code}" "$VERIFY_URL")
+
+            if [ "$status_code" = "200" ]; then
+              echo "✓ Version $VERSION is available in MCP Registry"
+              cat /tmp/mcp_verify.json
+              exit 0
+            fi
+
+            echo "Attempt $attempt/6: version not visible yet (HTTP $status_code). Retrying in 10s..."
+            sleep 10
+          done
+
+          echo "Error: version $VERSION was not found in MCP Registry after retries"
+          cat /tmp/mcp_verify.json || true
+          exit 1
