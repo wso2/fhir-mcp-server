@@ -314,6 +314,7 @@ jobs:
           set -euo pipefail
 
           VERSION=${{ needs.details.outputs.new_version }}
+          BRANCH=${{ github.event.repository.default_branch }}
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -324,7 +325,9 @@ jobs:
             echo "No changes to commit (files already at $VERSION)"
           else
             git commit -m "Chore: update version files to $VERSION"
-            git push origin HEAD:${{ github.event.repository.default_branch }}
+            # Pull with rebase to handle concurrent releases, then push
+            git pull --rebase origin $BRANCH
+            git push origin HEAD:$BRANCH
             echo "✓ Version files committed and pushed"
           fi
 
