@@ -40,9 +40,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Use --link for better caching
-COPY --from=builder --link /opt/venv /opt/venv
-COPY --from=builder --link /app /app
+COPY --from=builder /opt/venv /opt/venv
+COPY --from=builder /app /app
 
 RUN useradd -m -u 10001 appuser
 USER 10001
