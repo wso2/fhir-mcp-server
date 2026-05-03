@@ -17,6 +17,7 @@
 import aiohttp
 import logging
 
+from toon_format import encode as toon_encode
 from fhir_mcp_server.oauth import ServerConfigs
 
 from typing import Any, Dict, List, Optional
@@ -123,6 +124,14 @@ async def get_capability_statement(metadata_url: str) -> Dict[str, Any]:
             "Unable to invoke the FHIR metadata endpoint. Caused by, ", exc_info=ex
         )
         raise ValueError("Unable to fetch FHIR metadata")
+
+
+def format_response(data: Any, response_format: str = "toon") -> Any:
+    if response_format == "toon":
+        return toon_encode(data)
+    if response_format == "json":
+        return data
+    raise ValueError(f"Unsupported response_format '{response_format}'. Must be 'toon' or 'json'.")
 
 
 def get_default_headers() -> Dict[str, str]:
