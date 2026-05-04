@@ -20,6 +20,7 @@ import logging
 from fhir_mcp_server.utils import (
     build_user_profile,
     create_async_fhir_client,
+    filter_by_fhirpath,
     format_response,
     get_bundle_entries,
     get_default_headers,
@@ -285,6 +286,13 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                 ],
             ),
         ],
+        fhirpath_filters: Annotated[
+            List[str],
+            Field(
+                description="FHIRPath expressions to sparse-filter the response. MUST be provided to reduce token usage.",
+                examples=[["Bundle.total", "Condition.code", "Condition.clinicalStatus"]],
+            ),
+        ] = [],
         response_format: Annotated[
             str,
             Field(
@@ -313,7 +321,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                 await client.resources(type).search(Raw(**searchParam)).fetch_raw()
             )
             logger.debug("Async resources fetched:", async_resources)
-            return format_response(async_resources, response_format)
+            return format_response(filter_by_fhirpath(async_resources, fhirpath_filters), response_format)
         except ValueError as ex:
             logger.exception(
                 f"User does not have permission to perform FHIR '{type}' resource search operation. Caused by, ",
@@ -383,6 +391,13 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                 examples=["$everything"],
             ),
         ] = "",
+        fhirpath_filters: Annotated[
+            List[str],
+            Field(
+                description="FHIRPath expressions to sparse-filter the response. MUST be provided to reduce token usage. Bundle.* expressions supported with $everything.",
+                examples=[["Bundle.total", "Patient.name", "Patient.birthDate"]],
+            ),
+        ] = [],
         response_format: Annotated[
             str,
             Field(
@@ -413,9 +428,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                 operation=operation or "", method="GET", params=searchParam
             )
 
-            return format_response(
-                await get_bundle_entries(bundle=bundle), response_format
-            )
+            return format_response(filter_by_fhirpath(bundle, fhirpath_filters), response_format)
         except ResourceNotFound as ex:
             logger.error(
                 f"Resource of type '{type}' with id '{id}' not found. Caused by, ",

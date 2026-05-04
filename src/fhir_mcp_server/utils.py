@@ -16,6 +16,7 @@
 
 import aiohttp
 import logging
+import fhirpathpy
 
 from toon_format import encode as toon_encode
 from fhir_mcp_server.oauth import ServerConfigs
@@ -124,6 +125,61 @@ async def get_capability_statement(metadata_url: str) -> Dict[str, Any]:
             "Unable to invoke the FHIR metadata endpoint. Caused by, ", exc_info=ex
         )
         raise ValueError("Unable to fetch FHIR metadata")
+
+
+def _apply_fhirpath(resource: Dict[str, Any], expressions: List[str]) -> Dict[str, Any]:
+    """Apply FHIRPath expressions to a single FHIR resource. Always includes id and resourceType."""
+    is_bundle = resource.get("resourceType") == "Bundle"
+    if is_bundle:
+        result: Dict[str, Any] = {}  # bundle id/resourceType are not useful — caller must request via Bundle.id etc.
+    else:
+        result: Dict[str, Any] = {k: resource[k] for k in ("id", "resourceType") if k in resource}
+    
+    resource_type = resource.get("resourceType", "")
+    applicable = []
+    for expr in expressions:
+        type_prefix = expr.split(".")[0]
+        has_resource_type_prefix = type_prefix[0].isupper()  # FHIRPath resource type prefixes are always PascalCase e.g. "Patient.name" vs unprefixed "name.family"
+        if not has_resource_type_prefix or type_prefix == resource_type:
+            applicable.append(expr)
+    unmatched: List[str] = []
+    errors: List[str] = []
+    for expr in applicable:
+        try:
+            matched = fhirpathpy.compile(expr)(resource)
+            if matched:
+                result[expr] = matched  # e.g. {"Observation.valueQuantity": [{"value": 7.2, "unit": "mmol/L"}]}
+            else:
+                unmatched.append(expr)
+        except Exception as e:
+            logging.warning("FHIRPath eval failed for expression %r: %s", expr, e)
+            errors.append(expr)
+    if unmatched:
+        result["_unmatched"] = unmatched
+    if errors:
+        result["_errors"] = errors
+    return result
+
+
+def filter_by_fhirpath(data: Any, expressions: List[str]) -> Any:
+    """Sparse-filter a FHIR response using FHIRPath expressions."""
+    if not expressions:
+        return data
+    if isinstance(data, dict):
+        if data.get("resourceType") == "Bundle":
+            # filter bundle metadata using the same expressions, then filter each entry
+            result = _apply_fhirpath(data, expressions)
+            result["entry"] = [filter_by_fhirpath(entry, expressions) for entry in data.get("entry", [])]
+            return result
+        if "resource" in data and isinstance(data["resource"], dict):
+            # raw bundle entry wrapper {"fullUrl": ..., "resource": {...}, "search": ...} — filter the resource inside
+            result = _apply_fhirpath(data["resource"], expressions)
+            if "search" in data:
+                result["search"] = data["search"]  # preserve match/include mode for _include queries
+            return result
+        # single resource
+        return _apply_fhirpath(data, expressions)
+    return data
 
 
 def format_response(data: Any, response_format: str = "toon") -> Any:
