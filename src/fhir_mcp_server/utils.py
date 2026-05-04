@@ -18,6 +18,8 @@ import aiohttp
 import logging
 import fhirpathpy
 
+from functools import lru_cache
+
 from toon_format import encode as toon_encode
 from fhir_mcp_server.oauth import ServerConfigs
 
@@ -127,32 +129,36 @@ async def get_capability_statement(metadata_url: str) -> Dict[str, Any]:
         raise ValueError("Unable to fetch FHIR metadata")
 
 
+@lru_cache(maxsize=256)
+def _compile_fhirpath(expr: str):
+    return fhirpathpy.compile(expr)
+
+
 def _apply_fhirpath(resource: Dict[str, Any], expressions: List[str]) -> Dict[str, Any]:
     """Apply FHIRPath expressions to a single FHIR resource. Always includes id and resourceType."""
     is_bundle = resource.get("resourceType") == "Bundle"
+    result: Dict[str, Any]
     if is_bundle:
-        result: Dict[str, Any] = {}  # bundle id/resourceType are not useful — caller must request via Bundle.id etc.
+        result = {}  # bundle id/resourceType are not useful — caller must request via Bundle.id etc if needed
     else:
-        result: Dict[str, Any] = {k: resource[k] for k in ("id", "resourceType") if k in resource}
-    
+        result = {k: resource[k] for k in ("id", "resourceType") if k in resource}
+
     resource_type = resource.get("resourceType", "")
-    applicable = []
-    for expr in expressions:
-        type_prefix = expr.split(".")[0]
-        has_resource_type_prefix = type_prefix[0].isupper()  # FHIRPath resource type prefixes are always PascalCase e.g. "Patient.name" vs unprefixed "name.family"
-        if not has_resource_type_prefix or type_prefix == resource_type:
-            applicable.append(expr)
     unmatched: List[str] = []
     errors: List[str] = []
-    for expr in applicable:
+
+    for expr in expressions:
+        prefix = expr.split(".")[0]
+        if not prefix or (prefix[0].isupper() and prefix != resource_type):  # skip empty or expressions prefixed for a different resource type e.g. skip "Patient.name" when processing an Observation
+            continue
         try:
-            matched = fhirpathpy.compile(expr)(resource)
+            matched = _compile_fhirpath(expr)(resource)
             if matched:
                 result[expr] = matched  # e.g. {"Observation.valueQuantity": [{"value": 7.2, "unit": "mmol/L"}]}
             else:
                 unmatched.append(expr)
         except Exception as e:
-            logging.warning("FHIRPath eval failed for expression %r: %s", expr, e)
+            logger.warning("FHIRPath eval failed for expression %r: %s", expr, e)
             errors.append(expr)
     if unmatched:
         result["_unmatched"] = unmatched
@@ -161,15 +167,17 @@ def _apply_fhirpath(resource: Dict[str, Any], expressions: List[str]) -> Dict[st
     return result
 
 
-def filter_by_fhirpath(data: Any, expressions: List[str]) -> Any:
+def filter_by_fhirpath(data: Any, expressions: List[str], _depth: int = 0) -> Any:
     """Sparse-filter a FHIR response using FHIRPath expressions."""
     if not expressions:
+        return data
+    if _depth > 10:  # cap recursion to guard against infinite loops in malformed nested Bundles
         return data
     if isinstance(data, dict):
         if data.get("resourceType") == "Bundle":
             # filter bundle metadata using the same expressions, then filter each entry
             result = _apply_fhirpath(data, expressions)
-            result["entry"] = [filter_by_fhirpath(entry, expressions) for entry in data.get("entry", [])]
+            result["entry"] = [filter_by_fhirpath(entry, expressions, _depth + 1) for entry in data.get("entry", [])]
             return result
         if "resource" in data and isinstance(data["resource"], dict):
             # raw bundle entry wrapper {"fullUrl": ..., "resource": {...}, "search": ...} — filter the resource inside

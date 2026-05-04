@@ -45,7 +45,7 @@ async def create_mcp_session():
 
 @pytest.mark.asyncio
 async def test_tool_get_capabilities(mcp_server) -> None:
-    request_payload: Dict[str, str] = {"type": "Patient"}
+    request_payload: Dict[str, str] = {"type": "Patient", "response_format": "json"}
     logger.info(f"[TOOL REQUEST] get_capabilities: {request_payload}")
     try:
         async with create_mcp_session() as mcp_session:
@@ -69,6 +69,7 @@ async def patient_id(mcp_server) -> str | None:
     suffix = uuid.uuid4().hex[:8]
     request_payload = {
         "type": "Patient",
+        "response_format": "json",
         "payload": {
             "resourceType": "Patient",
             "gender": "male",
@@ -104,7 +105,7 @@ async def patient_id(mcp_server) -> str | None:
 
 @pytest.mark.asyncio
 async def test_tool_read(mcp_server, patient_id):
-    request_payload = {"type": "Patient", "id": patient_id}
+    request_payload = {"type": "Patient", "id": patient_id, "response_format": "json"}
     logger.debug("[TEST REQUEST] read:", request_payload)
     try:
         async with create_mcp_session() as mcp_session:
@@ -129,7 +130,7 @@ async def test_tool_read(mcp_server, patient_id):
 
 @pytest.mark.asyncio
 async def test_tool_search(mcp_server, patient_id):
-    request_payload = {"type": "Patient", "searchParam": {"_id": patient_id}}
+    request_payload = {"type": "Patient", "searchParam": {"_id": patient_id}, "response_format": "json"}
     logger.debug("[TEST REQUEST] search:", request_payload)
     try:
         async with create_mcp_session() as mcp_session:
