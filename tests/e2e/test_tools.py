@@ -45,7 +45,7 @@ async def create_mcp_session():
 
 @pytest.mark.asyncio
 async def test_tool_get_capabilities(mcp_server) -> None:
-    request_payload: Dict[str, str] = {"type": "Patient", "response_format": "json"}
+    request_payload: Dict[str, str] = {"type": "Patient", "fmt": "json"}
     logger.info(f"[TOOL REQUEST] get_capabilities: {request_payload}")
     try:
         async with create_mcp_session() as mcp_session:
@@ -69,7 +69,7 @@ async def patient_id(mcp_server) -> str | None:
     suffix = uuid.uuid4().hex[:8]
     request_payload = {
         "type": "Patient",
-        "response_format": "json",
+        "fmt": "json",
         "payload": {
             "resourceType": "Patient",
             "gender": "male",
@@ -105,7 +105,7 @@ async def patient_id(mcp_server) -> str | None:
 
 @pytest.mark.asyncio
 async def test_tool_read(mcp_server, patient_id):
-    request_payload = {"type": "Patient", "id": patient_id, "response_format": "json"}
+    request_payload = {"type": "Patient", "id": patient_id, "fmt": "json"}
     logger.debug("[TEST REQUEST] read:", request_payload)
     try:
         async with create_mcp_session() as mcp_session:
@@ -130,7 +130,7 @@ async def test_tool_read(mcp_server, patient_id):
 
 @pytest.mark.asyncio
 async def test_tool_search(mcp_server, patient_id):
-    request_payload = {"type": "Patient", "searchParam": {"_id": patient_id}, "response_format": "json"}
+    request_payload = {"type": "Patient", "searchParam": {"_id": patient_id}, "fmt": "json"}
     logger.debug("[TEST REQUEST] search:", request_payload)
     try:
         async with create_mcp_session() as mcp_session:
@@ -153,6 +153,36 @@ async def test_tool_search(mcp_server, patient_id):
 
 
 @pytest.mark.asyncio
+async def test_tool_search_toon_format(mcp_server, patient_id):
+    request_payload = {"type": "Patient", "searchParam": {"_id": patient_id}}
+    logger.debug("[TEST REQUEST] search toon:", request_payload)
+    try:
+        async with create_mcp_session() as mcp_session:
+            tool_result: types.CallToolResult = await mcp_session.call_tool(
+                name="search", arguments=request_payload
+            )
+            assert tool_result is not None
+            assert not tool_result.isError
+            text = next(
+                (c.text for c in tool_result.content if isinstance(c, types.TextContent) and c.text),
+                None,
+            )
+            assert text, "No text content in toon response"
+            # Validates toon-style output by checking key: value syntax and confirming it is not valid JSON.
+            # Full toon parse validation (via toon_decode) is not done here.
+            assert "resourceType: Bundle" in text, f"Expected toon-encoded Bundle, got: {text[:200]}"
+            assert patient_id in text, f"Patient ID not found in toon response: {text[:200]}"
+            with pytest.raises(json.JSONDecodeError):
+                json.loads(text)
+    except asyncio.TimeoutError as ex:
+        logger.error(
+            "[TOOL RESPONSE] Timeout waiting for toon search response from MCP server",
+            exc_info=ex,
+        )
+        raise
+
+
+@pytest.mark.asyncio
 async def test_tool_search_condition_count(mcp_server):
     request_payload = {
         "type": "Condition",
@@ -160,7 +190,8 @@ async def test_tool_search_condition_count(mcp_server):
             "code": "http://snomed.info/sct|204256004",
             "_summary": "count",
             "_total": "estimate"
-        }
+        },
+        "fmt": "json",
     }
     logger.info("[TEST REQUEST] search Condition count:", request_payload)
     try:
@@ -194,6 +225,7 @@ async def test_tool_update(mcp_server, patient_id):
             "gender": "female",
             "name": {"family": "TestFamily", "given": ["TestGiven"]},
         },
+        "fmt": "json",
     }
     logger.debug("[TOOL REQUEST] update:", request_payload)
     try:
@@ -219,7 +251,7 @@ async def test_tool_update(mcp_server, patient_id):
 
 @pytest.mark.asyncio
 async def test_tool_delete(mcp_server, patient_id):
-    request_payload = {"type": "Patient", "id": patient_id}
+    request_payload = {"type": "Patient", "id": patient_id, "fmt": "json"}
     logger.debug("[TOOL REQUEST] delete:", request_payload)
     try:
         async with create_mcp_session() as mcp_session:

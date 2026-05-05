@@ -61,6 +61,10 @@ https://github.com/user-attachments/assets/96b433f1-3e53-4564-8466-65ab48d521de
 
 - **Tool integration**: Integratable with any MCP client such as VS Code, Claude Desktop, and MCP Inspector
 
+- **Response format**: Tools accept a `fmt` parameter (`toon` by default, or `json`) — TOON is a token-efficient format optimised for LLM consumption
+
+- **FHIRPath field filtering**: Tools accept a `fields` parameter containing FHIRPath expressions to return only the fields needed, reducing response size and token usage
+
 ## Prerequisites
 
 - Python 3.8+

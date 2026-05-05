@@ -197,7 +197,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                 examples=["Patient", "Observation", "Encounter"],
             ),
         ],
-        response_format: Annotated[
+        fmt: Annotated[
             str,
             Field(
                 description="Response format: 'toon' (default, token-efficient) or 'json'.",
@@ -241,7 +241,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                             "searchInclude": resource.get("searchInclude", []),
                             "searchRevInclude": resource.get("searchRevInclude", []),
                         },
-                        response_format,
+                        fmt,
                     )
             logger.info(f"Resource type '{type}' not found in the CapabilityStatement.")
             return format_response(
@@ -249,21 +249,22 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                     code="not-supported",
                     diagnostics=f"The interaction, operation, resource or profile {type} is not supported.",
                 ),
-                response_format,
+                fmt,
             )
         except Exception as ex:
             logger.exception(
                 f"Error while executing the FHIR metadata interaction for resource_type '{type}'. Caused by, ",
                 exc_info=ex,
             )
-        return format_response(await get_operation_outcome_exception(), response_format)
+        return format_response(await get_operation_outcome_exception(), fmt)
 
     @mcp.tool(
         description=(
             "Executes a standard FHIR `search` interaction on a given resource type, returning a bundle or list of matching resources. "
             "Use this when you need to query for multiple resources based on one or more search-parameters. "
-            "Do not use this tool for create, update, or delete operations, and be aware that large result sets may be paginated by the FHIR server."
-        )
+            "Do not use this tool for create, update, or delete operations, and be aware that large result sets may be paginated by the FHIR server. "
+            "Specify fields to keep responses focused — only the fields your task needs, leaving more context for reasoning (e.g., Patient.birthDate, Observation.valueQuantity)."
+            )
     )
     async def search(
         type: Annotated[
@@ -286,14 +287,14 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                 ],
             ),
         ],
-        fhirpath_filters: Annotated[
+        fields: Annotated[
             List[str],
             Field(
-                description="FHIRPath expressions to sparse-filter the response. MUST be provided to reduce token usage.",
-                examples=[["Bundle.total", "Condition.code", "Condition.clinicalStatus"]],
+                description="FHIRPath expressions specifying which fields to return. Omitting returns the full resource.",
+                examples=[["Condition.code", "Condition.clinicalStatus","Bundle.total"]],
             ),
         ] = [],
-        response_format: Annotated[
+        fmt: Annotated[
             str,
             Field(
                 description="Response format: 'toon' (default, token-efficient) or 'json'.",
@@ -313,15 +314,15 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                     "Unable to perform search operation: 'type' is a mandatory field."
                 )
                 return format_response(
-                    await get_operation_outcome_required_error("type"), response_format
+                    await get_operation_outcome_required_error("type"), fmt
                 )
 
             client: AsyncFHIRClient = await get_async_fhir_client()
             async_resources: list[Any] = (
                 await client.resources(type).search(Raw(**searchParam)).fetch_raw()
             )
-            logger.debug("Async resources fetched:", async_resources)
-            return format_response(filter_by_fhirpath(async_resources, fhirpath_filters), response_format)
+            logger.debug("Async resources fetched: %s", async_resources)
+            return format_response(filter_by_fhirpath(async_resources, fields), fmt)
         except ValueError as ex:
             logger.exception(
                 f"User does not have permission to perform FHIR '{type}' resource search operation. Caused by, ",
@@ -332,7 +333,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                     code="forbidden",
                     diagnostics=f"The user does not have the rights to perform search operation.",
                 ),
-                response_format,
+                fmt,
             )
         except OperationOutcome as ex:
             logger.exception(
@@ -341,21 +342,22 @@ def register_mcp_tools(mcp: FastMCP) -> None:
             )
             return format_response(
                 ex.resource["issue"] or await get_operation_outcome_exception(),
-                response_format,
+                fmt,
             )
         except Exception as ex:
             logger.exception(
                 f"An unexpected error occurred during the FHIR search operation for resource: '{type}'. Caused by, ",
                 exc_info=ex,
             )
-        return format_response(await get_operation_outcome_exception(), response_format)
+        return format_response(await get_operation_outcome_exception(), fmt)
 
     @mcp.tool(
         description=(
             "Performs a FHIR `read` interaction to retrieve a single resource instance by its type and resource ID, "
             "optionally refining the response with search parameters or custom operations. "
             "Use it when you know the exact resource ID and require that one resource; do not use it for bulk queries. "
-            "If additional query-level parameters or operations are needed (e.g., _elements or $validate), include them in searchParam or operation."
+            "If additional query-level parameters or operations are needed (e.g., _elements or $validate), include them in searchParam or operation. "
+            "Specify fields to keep responses focused — only the fields your task needs, leaving more context for reasoning (e.g., Patient.birthDate, Observation.valueQuantity)."
         )
     )
     async def read(
@@ -370,6 +372,13 @@ def register_mcp_tools(mcp: FastMCP) -> None:
             str,
             Field(description="The logical ID of a specific FHIR resource instance."),
         ],
+        fields: Annotated[
+            List[str],
+            Field(
+                description="FHIRPath expressions specifying which fields to return to reduce token usage. Omitting returns the full resource. Bundle.* expressions supported with $everything.",
+                examples=[["Patient.name", "Patient.birthDate", "Observation.valueQuantity"]]
+            ),
+        ] = [],
         searchParam: Annotated[
             Dict[str, str | List[str]],
             Field(
@@ -391,14 +400,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                 examples=["$everything"],
             ),
         ] = "",
-        fhirpath_filters: Annotated[
-            List[str],
-            Field(
-                description="FHIRPath expressions to sparse-filter the response. MUST be provided to reduce token usage. Bundle.* expressions supported with $everything.",
-                examples=[["Bundle.total", "Patient.name", "Patient.birthDate"]],
-            ),
-        ] = [],
-        response_format: Annotated[
+        fmt: Annotated[
             str,
             Field(
                 description="Response format: 'toon' (default, token-efficient) or 'json'.",
@@ -420,7 +422,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                     "Unable to perform read operation: 'type' is a mandatory field."
                 )
                 return format_response(
-                    await get_operation_outcome_required_error("type"), response_format
+                    await get_operation_outcome_required_error("type"), fmt
                 )
 
             client: AsyncFHIRClient = await get_async_fhir_client()
@@ -428,7 +430,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                 operation=operation or "", method="GET", params=searchParam
             )
 
-            return format_response(filter_by_fhirpath(bundle, fhirpath_filters), response_format)
+            return format_response(filter_by_fhirpath(bundle, fields), fmt)
         except ResourceNotFound as ex:
             logger.error(
                 f"Resource of type '{type}' with id '{id}' not found. Caused by, ",
@@ -439,7 +441,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                     code="not-found",
                     diagnostics=f"The resource of type '{type}' with id '{id}' was not found.",
                 ),
-                response_format,
+                fmt,
             )
         except ValueError as ex:
             logger.exception(
@@ -451,7 +453,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                     code="forbidden",
                     diagnostics=f"The user does not have the rights to perform read operation.",
                 ),
-                response_format,
+                fmt,
             )
         except OperationOutcome as ex:
             logger.exception(
@@ -460,14 +462,14 @@ def register_mcp_tools(mcp: FastMCP) -> None:
             )
             return format_response(
                 ex.resource["issue"] or await get_operation_outcome_exception(),
-                response_format,
+                fmt,
             )
         except Exception as ex:
             logger.exception(
                 f"An unexpected error occurred during the FHIR read operation for resource: '{type}'. Caused by, ",
                 exc_info=ex,
             )
-        return format_response(await get_operation_outcome_exception(), response_format)
+        return format_response(await get_operation_outcome_exception(), fmt)
 
     @mcp.tool(
         description=(
@@ -515,7 +517,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                 examples=["$evaluate"],
             ),
         ] = "",
-        response_format: Annotated[
+        fmt: Annotated[
             str,
             Field(
                 description="Response format: 'toon' (default, token-efficient) or 'json'.",
@@ -540,7 +542,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                     "Unable to perform create operation: 'type' is a mandatory field."
                 )
                 return format_response(
-                    await get_operation_outcome_required_error("type"), response_format
+                    await get_operation_outcome_required_error("type"), fmt
                 )
 
             client: AsyncFHIRClient = await get_async_fhir_client()
@@ -549,7 +551,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
             )
 
             return format_response(
-                await get_bundle_entries(bundle=bundle), response_format
+                await get_bundle_entries(bundle=bundle), fmt
             )
         except ValueError as ex:
             logger.exception(
@@ -561,7 +563,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                     code="forbidden",
                     diagnostics=f"The user does not have the rights to perform create operation.",
                 ),
-                response_format,
+                fmt,
             )
         except OperationOutcome as ex:
             logger.exception(
@@ -570,14 +572,14 @@ def register_mcp_tools(mcp: FastMCP) -> None:
             )
             return format_response(
                 ex.resource["issue"] or await get_operation_outcome_exception(),
-                response_format,
+                fmt,
             )
         except Exception as ex:
             logger.exception(
                 f"An unexpected error occurred during the FHIR create operation for resource: '{type}'. Caused by, ",
                 exc_info=ex,
             )
-        return format_response(await get_operation_outcome_exception(), response_format)
+        return format_response(await get_operation_outcome_exception(), fmt)
 
     @mcp.tool(
         description=(
@@ -632,7 +634,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                 examples=["$lastn"],
             ),
         ] = "",
-        response_format: Annotated[
+        fmt: Annotated[
             str,
             Field(
                 description="Response format: 'toon' (default, token-efficient) or 'json'.",
@@ -652,7 +654,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                     "Unable to perform update operation: 'type' is a mandatory field."
                 )
                 return format_response(
-                    await get_operation_outcome_required_error("type"), response_format
+                    await get_operation_outcome_required_error("type"), fmt
                 )
 
             client: AsyncFHIRClient = await get_async_fhir_client()
@@ -663,7 +665,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                 params=searchParam,
             )
             return format_response(
-                await get_bundle_entries(bundle=bundle), response_format
+                await get_bundle_entries(bundle=bundle), fmt
             )
         except ValueError as ex:
             logger.exception(
@@ -675,7 +677,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                     code="forbidden",
                     diagnostics=f"The user does not have the rights to perform update operation.",
                 ),
-                response_format,
+                fmt,
             )
         except OperationOutcome as ex:
             logger.exception(
@@ -684,14 +686,14 @@ def register_mcp_tools(mcp: FastMCP) -> None:
             )
             return format_response(
                 ex.resource["issue"] or await get_operation_outcome_exception(),
-                response_format,
+                fmt,
             )
         except Exception as ex:
             logger.exception(
                 f"An unexpected error occurred during the FHIR update operation for resource: '{type}'. Caused by, ",
                 exc_info=ex,
             )
-        return format_response(await get_operation_outcome_exception(), response_format)
+        return format_response(await get_operation_outcome_exception(), fmt)
 
     @mcp.tool(
         description=(
@@ -736,7 +738,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                 examples=["$expand"],
             ),
         ] = "",
-        response_format: Annotated[
+        fmt: Annotated[
             str,
             Field(
                 description="Response format: 'toon' (default, token-efficient) or 'json'.",
@@ -758,14 +760,14 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                     "Unable to perform delete operation: 'type' is a mandatory field."
                 )
                 return format_response(
-                    await get_operation_outcome_required_error("type"), response_format
+                    await get_operation_outcome_required_error("type"), fmt
                 )
             if not id and not searchParam:
                 logger.error(
                     "Unable to perform delete operation: 'id' or 'searchParam' is required."
                 )
                 return format_response(
-                    await get_operation_outcome_required_error("id"), response_format
+                    await get_operation_outcome_required_error("id"), fmt
                 )
 
             client: AsyncFHIRClient = await get_async_fhir_client()
@@ -774,7 +776,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
             )
             if isinstance(bundle, Dict):
                 return format_response(
-                    await get_bundle_entries(bundle=bundle), response_format
+                    await get_bundle_entries(bundle=bundle), fmt
                 )
             return format_response(
                 await get_operation_outcome(
@@ -782,7 +784,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                     code="SUCCESSFUL_DELETE",
                     diagnostics="Successfully deleted resource(s).",
                 ),
-                response_format,
+                fmt,
             )
         except ValueError as ex:
             logger.exception(
@@ -794,7 +796,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                     code="forbidden",
                     diagnostics=f"The user does not have the rights to perform delete operation.",
                 ),
-                response_format,
+                fmt,
             )
         except OperationOutcome as ex:
             logger.exception(
@@ -803,14 +805,14 @@ def register_mcp_tools(mcp: FastMCP) -> None:
             )
             return format_response(
                 ex.resource["issue"] or await get_operation_outcome_exception(),
-                response_format,
+                fmt,
             )
         except Exception as ex:
             logger.exception(
                 f"An unexpected error occurred during the FHIR delete operation for resource: '{type}'. Caused by, ",
                 exc_info=ex,
             )
-        return format_response(await get_operation_outcome_exception(), response_format)
+        return format_response(await get_operation_outcome_exception(), fmt)
 
     @mcp.tool(
         description=(
@@ -819,7 +821,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
         )
     )
     async def get_user(
-        response_format: Annotated[
+        fmt: Annotated[
             str,
             Field(
                 description="Response format: 'toon' (default, token-efficient) or 'json'.",
@@ -877,7 +879,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
             logger.debug(
                 f"Successfully retrieved profile for user: {resource_type}/{resource_id}"
             )
-            return format_response(profile, response_format)
+            return format_response(profile, fmt)
 
         except ValueError as ex:
             logger.exception(
@@ -889,7 +891,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                     code="forbidden",
                     diagnostics="The user does not have the rights to perform read operations.",
                 ),
-                response_format,
+                fmt,
             )
 
         except OperationOutcome as ex:
@@ -899,7 +901,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
             )
             return format_response(
                 ex.resource.get("issue") or await get_operation_outcome_exception(),
-                response_format,
+                fmt,
             )
 
         except Exception as ex:
@@ -907,7 +909,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                 "Unexpected error occurred while reading user resource. Caused by, ",
                 exc_info=ex,
             )
-        return format_response(await get_operation_outcome_exception(), response_format)
+        return format_response(await get_operation_outcome_exception(), fmt)
 
 
 @click.command()

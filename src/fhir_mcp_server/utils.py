@@ -149,12 +149,13 @@ def _apply_fhirpath(resource: Dict[str, Any], expressions: List[str]) -> Dict[st
 
     for expr in expressions:
         prefix = expr.split(".")[0]
-        if not prefix or (prefix[0].isupper() and prefix != resource_type):  # skip empty or expressions prefixed for a different resource type e.g. skip "Patient.name" when processing an Observation
+        if not prefix or (prefix[0].isupper() and prefix != resource_type) or (is_bundle and prefix[0].islower()):  # skip empty, wrong-type prefixed, or unprefixed expressions on Bundle wrapper
             continue
         try:
             matched = _compile_fhirpath(expr)(resource)
             if matched:
-                result[expr] = matched  # e.g. {"Observation.valueQuantity": [{"value": 7.2, "unit": "mmol/L"}]}
+                key = expr[len(prefix) + 1:] if prefix == resource_type else expr
+                result[key] = matched  # e.g. {"valueQuantity": [{"value": 7.2, "unit": "mmol/L"}]}
             else:
                 unmatched.append(expr)
         except Exception as e:
@@ -190,12 +191,12 @@ def filter_by_fhirpath(data: Any, expressions: List[str], _depth: int = 0) -> An
     return data
 
 
-def format_response(data: Any, response_format: str = "toon") -> Any:
-    if response_format == "toon":
+def format_response(data: Any, fmt: str = "toon") -> str | Any:
+    if fmt == "toon":
         return toon_encode(data)
-    if response_format == "json":
+    if fmt == "json":
         return data
-    raise ValueError(f"Unsupported response_format '{response_format}'. Must be 'toon' or 'json'.")
+    raise ValueError(f"Unsupported format '{fmt}'. Must be 'toon' or 'json'.")
 
 
 def get_default_headers() -> Dict[str, str]:
