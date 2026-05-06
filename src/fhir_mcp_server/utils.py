@@ -22,6 +22,7 @@ from functools import lru_cache
 
 from toon_format import encode as toon_encode
 from fhir_mcp_server.oauth import ServerConfigs
+from fhir_mcp_server.fhir_compactor import compact_resource
 
 from typing import Any, Dict, List, Optional
 from fhirpy import AsyncFHIRClient
@@ -134,14 +135,19 @@ def _compile_fhirpath(expr: str):
     return fhirpathpy.compile(expr)
 
 
+@lru_cache(maxsize=256)
+def _compile_fhirpath(expr: str):
+    return fhirpathpy.compile(expr)
+
+
 def _apply_fhirpath(resource: Dict[str, Any], expressions: List[str]) -> Dict[str, Any]:
     """Apply FHIRPath expressions to a single FHIR resource. Always includes id and resourceType."""
     is_bundle = resource.get("resourceType") == "Bundle"
     result: Dict[str, Any]
     if is_bundle:
-        result = {}  # bundle id/resourceType are not useful — caller must request via Bundle.id etc if needed
+        result: Dict[str, Any] = {}  # bundle id/resourceType are not useful — caller must request via Bundle.id etc.
     else:
-        result = {k: resource[k] for k in ("id", "resourceType") if k in resource}
+        result: Dict[str, Any] = {k: resource[k] for k in ("id", "resourceType") if k in resource}
 
     resource_type = resource.get("resourceType", "")
     unmatched: List[str] = []
