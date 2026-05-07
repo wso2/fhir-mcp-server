@@ -50,6 +50,9 @@ class ServerConfigs(BaseSettings):
     server_access_token: str | None = None
     server_disable_authorization: bool = False
 
+    # Output settings
+    json_output: bool = False
+
     def callback_url(
         self, server_url: str, suffix: str = "/oauth/callback"
     ) -> AnyHttpUrl:

@@ -25,7 +25,7 @@ compactor to produce a short, human-readable string.
 import base64
 from typing import Any, Dict, List
 
-from .fhir_complex_data_types import (
+from fhir_mcp_server.fhir_complex_data_types import (
     Address,
     Annotation,
     Attachment,

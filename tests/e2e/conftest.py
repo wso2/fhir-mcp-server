@@ -43,6 +43,7 @@ async def mcp_server() -> AsyncGenerator[bool, Any]:
     env["FHIR_MCP_HOST"] = "localhost"
     env["FHIR_MCP_PORT"] = "8001"
     env["FHIR_SERVER_DISABLE_AUTHORIZATION"] = "True"
+    env["FHIR_JSON_OUTPUT"] = "true"
 
     logger.info("Starting MCP server with: uv run fhir-mcp-server")
     process = subprocess.Popen(

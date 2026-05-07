@@ -45,7 +45,7 @@ async def create_mcp_session():
 
 @pytest.mark.asyncio
 async def test_tool_get_capabilities(mcp_server) -> None:
-    request_payload: Dict[str, str] = {"type": "Patient", "fmt": "json"}
+    request_payload: Dict[str, str] = {"type": "Patient"}
     logger.info(f"[TOOL REQUEST] get_capabilities: {request_payload}")
     try:
         async with create_mcp_session() as mcp_session:
@@ -69,7 +69,6 @@ async def patient_id(mcp_server) -> str | None:
     suffix = uuid.uuid4().hex[:8]
     request_payload = {
         "type": "Patient",
-        "fmt": "json",
         "payload": {
             "resourceType": "Patient",
             "gender": "male",
@@ -105,7 +104,7 @@ async def patient_id(mcp_server) -> str | None:
 
 @pytest.mark.asyncio
 async def test_tool_read(mcp_server, patient_id):
-    request_payload = {"type": "Patient", "id": patient_id, "fmt": "json"}
+    request_payload = {"type": "Patient", "id": patient_id}
     logger.debug("[TEST REQUEST] read:", request_payload)
     try:
         async with create_mcp_session() as mcp_session:
@@ -130,7 +129,7 @@ async def test_tool_read(mcp_server, patient_id):
 
 @pytest.mark.asyncio
 async def test_tool_search(mcp_server, patient_id):
-    request_payload = {"type": "Patient", "searchParam": {"_id": patient_id}, "fmt": "json"}
+    request_payload = {"type": "Patient", "searchParam": {"_id": patient_id}}
     logger.debug("[TEST REQUEST] search:", request_payload)
     try:
         async with create_mcp_session() as mcp_session:
@@ -191,7 +190,6 @@ async def test_tool_search_condition_count(mcp_server):
             "_summary": "count",
             "_total": "estimate"
         },
-        "fmt": "json",
     }
     logger.info("[TEST REQUEST] search Condition count:", request_payload)
     try:
@@ -225,7 +223,6 @@ async def test_tool_update(mcp_server, patient_id):
             "gender": "female",
             "name": {"family": "TestFamily", "given": ["TestGiven"]},
         },
-        "fmt": "json",
     }
     logger.debug("[TOOL REQUEST] update:", request_payload)
     try:
@@ -251,7 +248,7 @@ async def test_tool_update(mcp_server, patient_id):
 
 @pytest.mark.asyncio
 async def test_tool_delete(mcp_server, patient_id):
-    request_payload = {"type": "Patient", "id": patient_id, "fmt": "json"}
+    request_payload = {"type": "Patient", "id": patient_id}
     logger.debug("[TOOL REQUEST] delete:", request_payload)
     try:
         async with create_mcp_session() as mcp_session:

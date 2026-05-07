@@ -24,12 +24,15 @@ from toon_format import encode as toon_encode
 from fhir_mcp_server.oauth import ServerConfigs
 from fhir_mcp_server.fhir_compactor import compact_resource
 
-from typing import Any, Dict, List, Optional
+configs: ServerConfigs = ServerConfigs()
+
+from typing import Any, Dict, List, Optional, Set
 from fhirpy import AsyncFHIRClient
 from mcp.shared._httpx_utils import create_mcp_http_client
 
 logger: logging.Logger = logging.getLogger(__name__)
 
+MAX_RECURSION_DEPTH_FOR_FILTERING = 10
 
 async def create_async_fhir_client(
     config: ServerConfigs,
@@ -135,32 +138,34 @@ def _compile_fhirpath(expr: str):
     return fhirpathpy.compile(expr)
 
 
-@lru_cache(maxsize=256)
-def _compile_fhirpath(expr: str):
-    return fhirpathpy.compile(expr)
-
-
-def _apply_fhirpath(resource: Dict[str, Any], expressions: List[str]) -> Dict[str, Any]:
+def _filter_with_fhirpath(
+        resource: Dict[str, Any],
+        expressions: List[str]
+    ) -> Dict[str, Any]:
     """Apply FHIRPath expressions to a single FHIR resource. Always includes id and resourceType."""
+
     is_bundle = resource.get("resourceType") == "Bundle"
+
     result: Dict[str, Any]
     if is_bundle:
         result: Dict[str, Any] = {}  # bundle id/resourceType are not useful — caller must request via Bundle.id etc.
     else:
-        result: Dict[str, Any] = {k: resource[k] for k in ("id", "resourceType") if k in resource}
+        result: Dict[str, Any] = {k: resource[k] for k in ("id", "resourceType") if k in resource}  # keep id and resourceType
 
     resource_type = resource.get("resourceType", "")
     unmatched: List[str] = []
     errors: List[str] = []
 
     for expr in expressions:
+
+        # skip empty, wrong-type prefixed, or unprefixed expressions on Bundle wrapper
         prefix = expr.split(".")[0]
-        if not prefix or (prefix[0].isupper() and prefix != resource_type) or (is_bundle and prefix[0].islower()):  # skip empty, wrong-type prefixed, or unprefixed expressions on Bundle wrapper
+        if not prefix or (prefix[0].isupper() and prefix != resource_type) or (is_bundle and prefix[0].islower()):
             continue
         try:
             matched = _compile_fhirpath(expr)(resource)
             if matched:
-                key = expr[len(prefix) + 1:] if prefix == resource_type else expr
+                key = expr[len(prefix) + 1:] if prefix == resource_type else expr # strip resourceType prefix in key if present, e.g. "Patient.name" -> "name"
                 result[key] = matched  # e.g. {"valueQuantity": [{"value": 7.2, "unit": "mmol/L"}]}
             else:
                 unmatched.append(expr)
@@ -174,35 +179,58 @@ def _apply_fhirpath(resource: Dict[str, Any], expressions: List[str]) -> Dict[st
     return result
 
 
-def filter_by_fhirpath(data: Any, expressions: List[str], _depth: int = 0) -> Any:
-    """Sparse-filter a FHIR response using FHIRPath expressions."""
+def filter_resource_fields(data: Any, expressions: List[str], _depth: int = 0) -> Any:
+    """Sparse-filter a FHIR response using FHIRPath expressions."""     
+
+    # Case 1: no filtering needed.
+    if not expressions and configs.json_output:
+        return data
+
+    # Case 2: expressions empty, json_output=false -> strip always-excluded fields at resource level only
     if not expressions:
+        if isinstance(data, dict):
+            if "resourceType" in data:  # resource level (Patient, Observation, Bundle etc.) — strip excluded fields
+                return {k: filter_resource_fields(v, expressions) for k, v in data.items() if k not in get_default_excluded_fields()}
+            return data  # nested data type (CodeableConcept, Quantity etc.) — leave untouched
+        if isinstance(data, list):  # bundle entry list — recurse into each item to reach resource level
+            return [filter_resource_fields(item, expressions) for item in data]
+        return data  # primitive — return as is
+
+    # Case 3: expressions provided -> apply FHIRPath filtering
+    if _depth > MAX_RECURSION_DEPTH_FOR_FILTERING:  # cap recursion to guard against infinite loops in malformed nested Bundles
         return data
-    if _depth > 10:  # cap recursion to guard against infinite loops in malformed nested Bundles
-        return data
+    
     if isinstance(data, dict):
+        # Case 3a: Bundle — filter bundle-level fields, then recurse into each entry
         if data.get("resourceType") == "Bundle":
-            # filter bundle metadata using the same expressions, then filter each entry
-            result = _apply_fhirpath(data, expressions)
-            result["entry"] = [filter_by_fhirpath(entry, expressions, _depth + 1) for entry in data.get("entry", [])]
+            result = _filter_with_fhirpath(data, expressions)
+            result["entry"] = [filter_resource_fields(entry, expressions, _depth + 1) for entry in data.get("entry", [])]
             return result
+
+        # Case 3b: entry wrapper {"fullUrl", "resource", "search"} — filter the inner resource, preserve search mode
         if "resource" in data and isinstance(data["resource"], dict):
             # raw bundle entry wrapper {"fullUrl": ..., "resource": {...}, "search": ...} — filter the resource inside
-            result = _apply_fhirpath(data["resource"], expressions)
+            result = _filter_with_fhirpath(data["resource"], expressions)
+
             if "search" in data:
                 result["search"] = data["search"]  # preserve match/include mode for _include queries
             return result
-        # single resource
-        return _apply_fhirpath(data, expressions)
+
+        # Case 3c: single resource — filter directly
+        return _filter_with_fhirpath(data, expressions)
+
     return data
 
+def get_default_excluded_fields() -> Set[str]:
+    """Return fields to drop by default. Empty if json_output=true"""
+    if configs.json_output:
+        return set()
+    return {"meta", "text"}
 
-def format_response(data: Any, fmt: str = "toon") -> str | Any:
-    if fmt == "toon":
-        return toon_encode(data)
-    if fmt == "json":
+def format_response(data: Any) -> str | Any:
+    if configs.json_output:
         return data
-    raise ValueError(f"Unsupported format '{fmt}'. Must be 'toon' or 'json'.")
+    return toon_encode(compact_resource(data))
 
 
 def get_default_headers() -> Dict[str, str]:
