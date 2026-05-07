@@ -357,14 +357,6 @@ class TestFilterByFhirpath:
         "valueQuantity": {"value": 7.2, "unit": "mmol/L"},
     }
 
-    def test_empty_expressions_returns_data_unchanged(self):
-        """Test that empty expressions list returns original data unchanged when json_output=True."""
-        utils_module.configs.json_output = True
-        try:
-            assert filter_resource_fields(self.PATIENT, []) is self.PATIENT
-        finally:
-            utils_module.configs.json_output = False
-
     def test_non_dict_returns_unchanged(self):
         """Test that non-dict input is returned unchanged."""
         assert filter_resource_fields("raw string", ["Patient.name"]) == "raw string"
@@ -464,19 +456,6 @@ class TestFilterByFhirpath:
         assert "valueQuantity" in obs_entry
         assert "name" not in obs_entry
 
-    def test_bundle_no_expressions_returns_unchanged(self):
-        """Test that a Bundle with empty expressions is returned unchanged when json_output=True."""
-        bundle = {
-            "resourceType": "Bundle",
-            "entry": [{"resource": self.PATIENT}],
-        }
-        utils_module.configs.json_output = True
-        try:
-            result = filter_resource_fields(bundle, [])
-            assert result is bundle
-        finally:
-            utils_module.configs.json_output = False
-
     def test_bundle_unprefixed_expression_does_not_pollute_wrapper(self):
         """Unprefixed expressions should filter entry resources but not add _unmatched to the Bundle wrapper."""
         bundle = {
@@ -492,17 +471,89 @@ class TestFilterByFhirpath:
         assert "_unmatched" not in result, f"Bundle wrapper should not have _unmatched: {result.get('_unmatched')}"
 
 
+class TestFilterMetadataStripping:
+    """Test of filter_resource_fields: no expressions, json_output=False strips meta/text."""
+
+    def setup_method(self):
+        utils_module.configs.json_output = False
+
+    PATIENT_WITH_META = {
+        "resourceType": "Patient",
+        "id": "p1",
+        "gender": "male",
+        "meta": {"versionId": "1", "lastUpdated": "2024-01-01"},
+        "text": {"status": "generated", "div": "<div>...</div>"},
+        "name": [{"family": "Smith"}],
+    }
+
+    def test_meta_stripped_from_resource(self):
+        result = filter_resource_fields(self.PATIENT_WITH_META, [])
+        assert "meta" not in result
+        assert "gender" in result
+
+    def test_text_stripped_from_resource(self):
+        result = filter_resource_fields(self.PATIENT_WITH_META, [])
+        assert "text" not in result
+        assert "name" in result
+
+    def test_other_fields_preserved(self):
+        result = filter_resource_fields(self.PATIENT_WITH_META, [])
+        assert result["id"] == "p1"
+        assert result["gender"] == "male"
+
+    def test_nested_data_type_left_untouched(self):
+        # A CodeableConcept has no resourceType — should be returned as-is
+        coding = {"system": "http://snomed.info/sct", "code": "73211009", "meta": "should-stay"}
+        result = filter_resource_fields(coding, [])
+        assert result is coding
+
+    def test_primitive_returned_unchanged(self):
+        assert filter_resource_fields("raw-string", []) == "raw-string"
+        assert filter_resource_fields(42, []) == 42
+
+    def test_meta_stripped_from_bundle_entries(self):
+        bundle = {
+            "resourceType": "Bundle",
+            "meta": {"tag": [{"code": "SUBSETTED"}]},
+            "entry": [
+                {"resource": {**self.PATIENT_WITH_META}},
+            ],
+        }
+        result = filter_resource_fields(bundle, [])
+        assert "meta" not in result, "meta should be stripped from Bundle"
+        resource = result["entry"][0]["resource"]
+        assert "meta" not in resource, "meta should be stripped from entry resource"
+        assert "text" not in resource, "text should be stripped from entry resource"
+        assert resource["id"] == "p1"
+
+    def test_bundle_entry_without_resource_left_untouched(self):
+        bundle = {
+            "resourceType": "Bundle",
+            "entry": [{"fullUrl": "http://example.com/Patient/p1"}],
+        }
+        result = filter_resource_fields(bundle, [])
+        assert result["entry"][0] == {"fullUrl": "http://example.com/Patient/p1"}
+
+
 class TestFormatResponse:
     """Test the format_response function."""
 
     PATIENT = {"resourceType": "Patient", "id": "p1"}
 
-    def test_json_output_returns_data_unchanged(self):
-        """Test that json_output=True returns the original data object unchanged."""
+    def test_json_output_no_fields_returns_data_unchanged(self):
         utils_module.configs.json_output = True
         try:
-            result = format_response(self.PATIENT)
-            assert result is self.PATIENT
+            assert format_response(self.PATIENT) is self.PATIENT
+        finally:
+            utils_module.configs.json_output = False
+
+    def test_json_output_with_fields_filters_data(self):
+        patient = {**self.PATIENT, "meta": {"versionId": "1"}, "gender": "male"}
+        utils_module.configs.json_output = True
+        try:
+            result = format_response(patient, ["Patient.gender"])
+            assert "gender" in result
+            assert "meta" not in result
         finally:
             utils_module.configs.json_output = False
 

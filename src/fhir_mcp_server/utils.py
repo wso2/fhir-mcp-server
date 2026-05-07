@@ -140,7 +140,7 @@ def _compile_fhirpath(expr: str):
 
 def _filter_with_fhirpath(
         resource: Dict[str, Any],
-        expressions: List[str]
+        field_paths: List[str]
     ) -> Dict[str, Any]:
     """Apply FHIRPath expressions to a single FHIR resource. Always includes id and resourceType."""
 
@@ -156,7 +156,7 @@ def _filter_with_fhirpath(
     unmatched: List[str] = []
     errors: List[str] = []
 
-    for expr in expressions:
+    for expr in field_paths:
 
         # skip empty, wrong-type prefixed, or unprefixed expressions on Bundle wrapper
         prefix = expr.split(".")[0]
@@ -179,45 +179,47 @@ def _filter_with_fhirpath(
     return result
 
 
-def filter_resource_fields(data: Any, expressions: List[str], _depth: int = 0) -> Any:
-    """Sparse-filter a FHIR response using FHIRPath expressions."""     
+def filter_resource_fields(data: Any, field_paths: List[str] | None = None, _depth: int = 0) -> Any:
+    """
+    Strip default excluded fields (meta, text) when no expressions given; .
+    If field_paths provided, apply FHIRPath filtering to include only specified fields, always keeping id and resourceType.
+    For Bundles, field_paths are applied at the Bundle wrapper level (e.g. Bundle.id) and then recursively to each entry.resource (e.g. Bundle.entry.resource.Patient.name).
+    """
 
-    # Case 1: no filtering needed.
-    if not expressions and configs.json_output:
-        return data
-
-    # Case 2: expressions empty, json_output=false -> strip always-excluded fields at resource level only
-    if not expressions:
+    # Case 1: field_paths empty -> strip always-excluded fields at resource level only
+    if not field_paths:
         if isinstance(data, dict):
             if "resourceType" in data:  # resource level (Patient, Observation, Bundle etc.) — strip excluded fields
-                return {k: filter_resource_fields(v, expressions) for k, v in data.items() if k not in get_default_excluded_fields()}
+                return {k: filter_resource_fields(v, field_paths) for k, v in data.items() if k not in get_default_excluded_fields()}
+            if "resource" in data and isinstance(data["resource"], dict):  # bundle entry wrapper — recurse into inner resource
+                return {**data, "resource": filter_resource_fields(data["resource"], field_paths)}
             return data  # nested data type (CodeableConcept, Quantity etc.) — leave untouched
         if isinstance(data, list):  # bundle entry list — recurse into each item to reach resource level
-            return [filter_resource_fields(item, expressions) for item in data]
+            return [filter_resource_fields(item, field_paths) for item in data]
         return data  # primitive — return as is
 
-    # Case 3: expressions provided -> apply FHIRPath filtering
+    # Case 2: field_paths provided -> apply FHIRPath filtering
     if _depth > MAX_RECURSION_DEPTH_FOR_FILTERING:  # cap recursion to guard against infinite loops in malformed nested Bundles
         return data
     
     if isinstance(data, dict):
-        # Case 3a: Bundle — filter bundle-level fields, then recurse into each entry
+        # Case 2a: Bundle — filter bundle-level fields, then recurse into each entry
         if data.get("resourceType") == "Bundle":
-            result = _filter_with_fhirpath(data, expressions)
-            result["entry"] = [filter_resource_fields(entry, expressions, _depth + 1) for entry in data.get("entry", [])]
+            result = _filter_with_fhirpath(data, field_paths)
+            result["entry"] = [filter_resource_fields(entry, field_paths, _depth + 1) for entry in data.get("entry", [])]
             return result
 
-        # Case 3b: entry wrapper {"fullUrl", "resource", "search"} — filter the inner resource, preserve search mode
+        # Case 2b: entry wrapper {"fullUrl", "resource", "search"} — filter the inner resource, preserve search mode
         if "resource" in data and isinstance(data["resource"], dict):
             # raw bundle entry wrapper {"fullUrl": ..., "resource": {...}, "search": ...} — filter the resource inside
-            result = _filter_with_fhirpath(data["resource"], expressions)
+            result = _filter_with_fhirpath(data["resource"], field_paths)
 
             if "search" in data:
                 result["search"] = data["search"]  # preserve match/include mode for _include queries
             return result
 
-        # Case 3c: single resource — filter directly
-        return _filter_with_fhirpath(data, expressions)
+        # Case 2c: single resource — filter directly
+        return _filter_with_fhirpath(data, field_paths)
 
     return data
 
@@ -227,10 +229,15 @@ def get_default_excluded_fields() -> Set[str]:
         return set()
     return {"meta", "text"}
 
-def format_response(data: Any) -> str | Any:
+def format_response(data: Any, field_paths: List[str] | None = None) -> str | Any:
+    """
+    Format the FHIR response with filtering and output formatting.
+    - Default mode: LLM friendly ( field filtering + metadata filter + compact complex type + toon format)
+    - JSON output mode: only apply field filtering
+    """
     if configs.json_output:
-        return data
-    return toon_encode(compact_resource(data))
+        return filter_resource_fields(data, field_paths) if field_paths else data
+    return toon_encode(compact_resource(filter_resource_fields(data, field_paths)))
 
 
 def get_default_headers() -> Dict[str, str]:

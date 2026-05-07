@@ -178,6 +178,14 @@ class TestCompactHumanName:
         v = {"use": "usual", "family": "Smith", "given": ["Johnny"]}
         assert compact_resource(v) == "Johnny Smith (usual)"
 
+    def test_multiple_names_compacted_as_list(self):
+        v = [
+            {"use": "official", "prefix": ["Ms."], "family": "Smith", "given": ["Jane"]},
+            {"use": "maiden", "family": "Jones", "given": ["Jane"]},
+            {"use": "nickname", "given": ["Jenny"]},
+        ]
+        assert compact_resource(v) == ["Ms. Jane Smith", "Jane Jones (maiden)", "Jenny (nickname)"]
+
 
 class TestCompactAddress:
     def test_full_address(self):

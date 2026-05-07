@@ -20,7 +20,6 @@ import logging
 from fhir_mcp_server.utils import (
     build_user_profile,
     create_async_fhir_client,
-    filter_resource_fields,
     format_response,
     get_bundle_entries,
     get_default_headers,
@@ -307,7 +306,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                 await client.resources(type).search(Raw(**searchParam)).fetch_raw()
             )
             logger.debug("Async resources fetched: %s", async_resources)
-            return format_response(filter_resource_fields(async_resources, fields))
+            return format_response(async_resources, fields)
         except ValueError as ex:
             logger.exception(
                 f"User does not have permission to perform FHIR '{type}' resource search operation. Caused by, ",
@@ -406,7 +405,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                 operation=operation or "", method="GET", params=searchParam
             )
 
-            return format_response(filter_resource_fields(bundle, fields))
+            return format_response(bundle, fields)
         except ResourceNotFound as ex:
             logger.error(
                 f"Resource of type '{type}' with id '{id}' not found. Caused by, ",
@@ -516,8 +515,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                 operation=operation or "", data=payload, params=searchParam
             )
 
-            return format_response(
-                await get_bundle_entries(bundle=bundle))
+            return format_response(await get_bundle_entries(bundle=bundle))
         except ValueError as ex:
             logger.exception(
                 f"User does not have permission to perform FHIR '{type}' resource create operation. Caused by, ",
@@ -620,8 +618,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                 data={**payload, "id": id},
                 params=searchParam,
             )
-            return format_response(
-                await get_bundle_entries(bundle=bundle))
+            return format_response(await get_bundle_entries(bundle=bundle))
         except ValueError as ex:
             logger.exception(
                 f"User does not have permission to perform FHIR '{type}' resource update operation. Caused by, ",
@@ -719,8 +716,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                 operation=operation or "", method="DELETE", params=searchParam
             )
             if isinstance(bundle, Dict):
-                return format_response(
-                    await get_bundle_entries(bundle=bundle))
+                return format_response(await get_bundle_entries(bundle=bundle))
             return format_response(
                 await get_operation_outcome(
                     severity="information",

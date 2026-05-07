@@ -43,6 +43,28 @@ async def create_mcp_session():
             yield session
 
 
+@asynccontextmanager
+async def create_mcp_session_token_efficient():
+    async with streamablehttp_client("http://localhost:8002/mcp/") as (read, write, _):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            yield session
+
+
+def extract_token_efficient_text(tool_result: types.CallToolResult) -> str:
+    """Return raw text from a token-efficient tool result and assert it is not JSON."""
+    assert tool_result is not None
+    assert not tool_result.isError
+    text = next(
+        (c.text for c in tool_result.content if isinstance(c, types.TextContent) and c.text),
+        None,
+    )
+    assert text, "No text content in token-efficient tool_result"
+    with pytest.raises(json.JSONDecodeError):
+        json.loads(text)
+    return text
+
+
 @pytest.mark.asyncio
 async def test_tool_get_capabilities(mcp_server) -> None:
     request_payload: Dict[str, str] = {"type": "Patient"}
@@ -72,10 +94,7 @@ async def patient_id(mcp_server) -> str | None:
         "payload": {
             "resourceType": "Patient",
             "gender": "male",
-            "name": {
-                "family": f"TestFamily-{suffix}",
-                "given": [f"TestGiven-{suffix}"],
-            },
+            "name": [{"prefix": ["Mr."], "family": f"TestFamily-{suffix}", "given": ["TestGiven"]}],
         },
     }
     logger.debug("[TOOL REQUEST] create:", request_payload)
@@ -151,34 +170,6 @@ async def test_tool_search(mcp_server, patient_id):
         raise
 
 
-@pytest.mark.asyncio
-async def test_tool_search_toon_format(mcp_server, patient_id):
-    request_payload = {"type": "Patient", "searchParam": {"_id": patient_id}}
-    logger.debug("[TEST REQUEST] search toon:", request_payload)
-    try:
-        async with create_mcp_session() as mcp_session:
-            tool_result: types.CallToolResult = await mcp_session.call_tool(
-                name="search", arguments=request_payload
-            )
-            assert tool_result is not None
-            assert not tool_result.isError
-            text = next(
-                (c.text for c in tool_result.content if isinstance(c, types.TextContent) and c.text),
-                None,
-            )
-            assert text, "No text content in toon response"
-            # Validates toon-style output by checking key: value syntax and confirming it is not valid JSON.
-            # Full toon parse validation (via toon_decode) is not done here.
-            assert "resourceType: Bundle" in text, f"Expected toon-encoded Bundle, got: {text[:200]}"
-            assert patient_id in text, f"Patient ID not found in toon response: {text[:200]}"
-            with pytest.raises(json.JSONDecodeError):
-                json.loads(text)
-    except asyncio.TimeoutError as ex:
-        logger.error(
-            "[TOOL RESPONSE] Timeout waiting for toon search response from MCP server",
-            exc_info=ex,
-        )
-        raise
 
 
 @pytest.mark.asyncio
@@ -273,6 +264,136 @@ async def test_tool_delete(mcp_server, patient_id):
             exc_info=ex,
         )
         raise
+
+
+@pytest_asyncio.fixture
+async def te_patient(mcp_server_token_efficient) -> tuple[str, str] | None:
+    """Create a Patient via the token-efficient server and return (id, compacted_name)."""
+    suffix = uuid.uuid4().hex[:8]
+    family = f"TestFamily-{suffix}"
+    given, prefix = "TestGiven", "Mr."
+    async with create_mcp_session_token_efficient() as session:
+        tool_result = await session.call_tool("create", {
+            "type": "Patient",
+            "payload": {
+                "resourceType": "Patient",
+                "gender": "male",
+                "name": [{"prefix": [prefix], "family": family, "given": [given]}],
+            },
+        })
+        text = extract_token_efficient_text(tool_result)
+        compacted_name = f"{prefix} {given} {family}"
+        assert compacted_name in text, f"Compacted name missing from create response: {text[:300]}"
+        # extract id from "id: <value>" line
+        pid = next(
+            line.split(": ", 1)[1].strip().strip('"')
+            for line in text.splitlines()
+            if line.startswith("id: ")
+        )
+        return pid, compacted_name
+
+
+class TestTokenEfficientOutput:
+    """
+    Verifies the three properties of token-efficient output mode:
+      1. Toon format  — key: value syntax, not JSON
+      2. Metadata stripped — 'meta' and 'text' fields absent
+      3. Complex types compacted — HumanName flattened to a single string
+    """
+
+    @pytest.mark.asyncio
+    async def test_get_capabilities(self, mcp_server_token_efficient) -> None:
+        logger.info("[TOOL REQUEST] token-efficient get_capabilities: Patient")
+        async with create_mcp_session_token_efficient() as session:
+            tool_result = await session.call_tool("get_capabilities", {"type": "Patient"})
+            text = extract_token_efficient_text(tool_result)
+            # toon format
+            assert "type: Patient" in text, f"Missing 'type: Patient': {text[:300]}"
+            assert "searchParam" in text, f"Missing searchParam: {text[:300]}"
+            # no JSON braces/brackets at the top level
+            assert not text.strip().startswith("{"), f"Output looks like JSON: {text[:300]}"
+
+    @pytest.mark.asyncio
+    async def test_create(self, te_patient) -> None:
+        pid, compacted_name = te_patient
+        logger.info(f"[TOOL REQUEST] token-efficient create verified: Patient/{pid}")
+        # Fixture already asserts create output — just verify the returned values are usable
+        assert pid, "Patient ID missing"
+        assert compacted_name.startswith("Mr."), f"Unexpected compacted name: {compacted_name}"
+
+    @pytest.mark.asyncio
+    async def test_search(self, mcp_server_token_efficient, te_patient) -> None:
+        pid, compacted_name = te_patient
+        logger.info(f"[TOOL REQUEST] token-efficient search: Patient _id={pid}")
+        async with create_mcp_session_token_efficient() as session:
+            tool_result = await session.call_tool("search", {
+                "type": "Patient",
+                "searchParam": {"_id": pid},
+            })
+            text = extract_token_efficient_text(tool_result)
+            # toon format — Bundle with entry list
+            assert "resourceType: Bundle" in text, f"Missing Bundle: {text[:300]}"
+            assert "entry[" in text, f"Entry list not in toon format: {text[:300]}"
+            assert pid in text, f"Patient ID not found: {text[:300]}"
+            # HumanName compacted
+            assert compacted_name in text, f"Compacted name not found: {text[:300]}"
+            # metadata stripped
+            assert "meta:" not in text, f"meta should be stripped: {text[:300]}"
+
+    @pytest.mark.asyncio
+    async def test_read(self, mcp_server_token_efficient, te_patient) -> None:
+        pid, compacted_name = te_patient
+        logger.info(f"[TOOL REQUEST] token-efficient read: Patient/{pid}")
+        async with create_mcp_session_token_efficient() as session:
+            tool_result = await session.call_tool("read", {"type": "Patient", "id": pid})
+            text = extract_token_efficient_text(tool_result)
+            # toon format
+            assert "resourceType: Patient" in text, f"Missing resourceType: {text[:300]}"
+            assert pid in text, f"Missing id: {text[:300]}"
+            assert "gender: male" in text, f"Missing gender: {text[:300]}"
+            # HumanName compacted
+            assert compacted_name in text, f"Compacted name not found: {text[:300]}"
+            # metadata stripped
+            assert "meta:" not in text, f"meta should be stripped: {text[:300]}"
+            assert "\ntext:" not in text, f"text should be stripped: {text[:300]}"
+
+    @pytest.mark.asyncio
+    async def test_update(self, mcp_server_token_efficient, te_patient) -> None:
+        pid, _ = te_patient
+        logger.info(f"[TOOL REQUEST] token-efficient update: Patient/{pid}")
+        async with create_mcp_session_token_efficient() as session:
+            tool_result = await session.call_tool("update", {
+                "type": "Patient",
+                "id": pid,
+                "payload": {
+                    "resourceType": "Patient",
+                    "gender": "female",
+                    "name": [{"prefix": ["Ms."], "family": "TestFamily", "given": ["TestGiven"]}],
+                },
+            })
+            text = extract_token_efficient_text(tool_result)
+            # toon format + updated fields
+            assert "resourceType: Patient" in text, f"Missing resourceType: {text[:300]}"
+            assert "gender: female" in text, f"Gender not updated: {text[:300]}"
+            # HumanName compacted with new prefix
+            assert "name[1]: Ms. TestGiven TestFamily" in text, f"Name not compacted: {text[:300]}"
+            # metadata stripped
+            assert "meta:" not in text, f"meta should be stripped: {text[:300]}"
+
+    @pytest.mark.asyncio
+    async def test_delete(self, mcp_server_token_efficient, te_patient) -> None:
+        pid, _ = te_patient
+        logger.info(f"[TOOL REQUEST] token-efficient delete: Patient/{pid}")
+        async with create_mcp_session_token_efficient() as session:
+            tool_result = await session.call_tool("delete", {"type": "Patient", "id": pid})
+            text = extract_token_efficient_text(tool_result)
+            assert text is not None, "Delete returned no output"
+
+            # Verify deleted — read should return an OperationOutcome in toon format
+            tool_result = await session.call_tool("read", {"type": "Patient", "id": pid})
+            text = extract_token_efficient_text(tool_result)
+            assert "resourceType: OperationOutcome" in text, f"Expected OperationOutcome after delete: {text[:300]}"
+            assert "meta:" not in text, f"meta should be stripped from OperationOutcome: {text[:300]}"
 
 
 async def extract_resource(tool_result: types.CallToolResult) -> Dict:

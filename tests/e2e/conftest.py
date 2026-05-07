@@ -32,20 +32,19 @@ logging.basicConfig(
 logger: logging.Logger = logging.getLogger(__name__)
 
 
-@pytest_asyncio.fixture
-async def mcp_server() -> AsyncGenerator[bool, Any]:
-    """Start the MCP server in a subprocess for the test session, streaming stdout in real time."""
+def _start_mcp_server(port: int, extra_env: dict) -> subprocess.Popen:
+    """Start the MCP server in a subprocess, streaming stdout in real time."""
     env = os.environ.copy()
     env["PYTHONPATH"] = os.path.abspath(
         os.path.join(os.path.dirname(__file__), "..", "..", "src")
     )
     env["FHIR_SERVER_BASE_URL"] = "https://hapi.fhir.org/baseR4"
     env["FHIR_MCP_HOST"] = "localhost"
-    env["FHIR_MCP_PORT"] = "8001"
+    env["FHIR_MCP_PORT"] = str(port)
     env["FHIR_SERVER_DISABLE_AUTHORIZATION"] = "True"
-    env["FHIR_JSON_OUTPUT"] = "true"
+    env.update(extra_env)
 
-    logger.info("Starting MCP server with: uv run fhir-mcp-server")
+    logger.info(f"Starting MCP server on port {port} with: uv run fhir-mcp-server")
     process = subprocess.Popen(
         ["uv", "run", "fhir-mcp-server"],
         env=env,
@@ -64,7 +63,7 @@ async def mcp_server() -> AsyncGenerator[bool, Any]:
     t = threading.Thread(target=stream_output, daemon=True)
     t.start()
 
-    # Wait for the server to be ready (port 8001 open)
+    # Wait for the server to be ready
     start = time.time()
     ready = False
     while time.time() - start < 5:  # wait up to 5 seconds
@@ -73,9 +72,9 @@ async def mcp_server() -> AsyncGenerator[bool, Any]:
             if process.stdout is not None:
                 for line in process.stdout:
                     logger.debug(f"{line.rstrip()}")
-            raise RuntimeError("MCP server process exited before port 8001 was open.")
+            raise RuntimeError(f"MCP server process exited before port {port} was open.")
         try:
-            with socket.create_connection(("localhost", 8001), timeout=1):
+            with socket.create_connection(("localhost", port), timeout=1):
                 ready = True
                 break
         except (OSError, ConnectionRefusedError) as ex:
@@ -87,9 +86,26 @@ async def mcp_server() -> AsyncGenerator[bool, Any]:
                 logger.debug(f"{line.rstrip()}")
         process.terminate()
         process.wait()
-        raise RuntimeError(f"MCP server failed to start or port 8001 not open.")
-    logger.info("MCP server is ready on port 8001.")
+        raise RuntimeError(f"MCP server failed to start or port {port} not open.")
+    logger.info(f"MCP server is ready on port {port}.")
+    return process
+
+
+@pytest_asyncio.fixture
+async def mcp_server() -> AsyncGenerator[bool, Any]:
+    """MCP server with JSON output on port 8001."""
+    process = _start_mcp_server(8001, {"FHIR_JSON_OUTPUT": "true"})
     yield True
-    logger.info("Terminating MCP server.")
+    logger.info("Terminating MCP server (json output).")
+    process.terminate()
+    process.wait()
+
+
+@pytest_asyncio.fixture
+async def mcp_server_token_efficient() -> AsyncGenerator[bool, Any]:
+    """MCP server with token efficient output on port 8002."""
+    process = _start_mcp_server(8002, {"FHIR_JSON_OUTPUT": "false"})
+    yield True
+    logger.info("Terminating MCP server (token efficient output).")
     process.terminate()
     process.wait()
