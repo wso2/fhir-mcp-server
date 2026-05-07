@@ -324,6 +324,59 @@ def _compact_money(v: Money) -> str:
     return f"{value} {currency}".strip()
 
 
+def _extract_extension_value(data: dict) -> str:
+    """Extract just the value from an extension dict, without the URL label."""
+    value_keys = [k for k in data if k.startswith("value")]
+    if len(value_keys) != 1:
+        return ""
+    val = data[value_keys[0]]
+    if isinstance(val, (str, bool)):
+        return str(val)
+    if isinstance(val, float):
+        return f"{val:g}"
+    if isinstance(val, int):
+        return str(val)
+    if isinstance(val, dict):
+        compacted = compact_resource(val)
+        return compacted if isinstance(compacted, str) else ""
+    return ""
+
+
+def _compact_extension(data: dict) -> str | dict:
+    """Compact a FHIR extension to 'url|value' format.
+
+    For nested extensions returns a dict keyed by sub-URL so TOON renders each on its own line.
+    Returns "" when the value can't be reduced — caller returns raw dict.
+    """
+    url = data.get("url", "")
+
+    if "extension" in data:
+        nested = data["extension"]
+        if isinstance(nested, list):
+            result: dict = {}
+            for e in nested:
+                if not isinstance(e, dict):
+                    continue
+                sub_url = e.get("url", "")
+                value_str = _extract_extension_value(e)
+                if not value_str:
+                    continue
+                if sub_url in result:
+                    existing = result[sub_url]
+                    result[sub_url] = existing if isinstance(existing, list) else [existing]
+                    result[sub_url].append(value_str)
+                else:
+                    result[sub_url] = value_str
+            if result:
+                return {"url": url, **result} if url else result
+        return ""
+
+    value_str = _extract_extension_value(data)
+    if not value_str:
+        return ""
+    return f"{url}|{value_str}" if url else value_str
+
+
 def compact_resource(data: Any) -> Any:
     """Recursively compact FHIR General-Purpose Data Types in a FHIR response.
 
@@ -340,6 +393,11 @@ def compact_resource(data: Any) -> Any:
         return [compact_resource(item) for item in data]
     if not isinstance(data, dict):  # primitive (string, number, bool) — nothing to compact
         return data
+
+    # Detect a FHIR Extension: every key is "url", "extension", or "value*"
+    if "url" in data and all(k == "url" or k == "extension" or k.startswith("value") for k in data):
+        result = _compact_extension(data)
+        return result if result != "" else data
 
     for fhir_type, compactor in [
         (Ratio,           _compact_ratio),

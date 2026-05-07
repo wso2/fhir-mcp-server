@@ -17,8 +17,9 @@
 """
 Minimal Pydantic models for the FHIR data types used by the compactor.
 
-These models intentionally accept extra fields so compaction can be applied
-against raw FHIR payloads without full schema validation.
+extra="forbid" prevents false-positive type matches (e.g. Attachment matching
+an Extension dict via the shared "url" field). id and extension are added to
+FhirBaseModel because any FHIR element may carry them.
 """
 
 import base64
@@ -32,16 +33,9 @@ _CONTACT_POINT_SYSTEMS = {"phone", "fax", "email", "pager", "url", "sms", "other
 
 
 class FhirBaseModel(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-    _discriminator_keys: ClassVar[List[str]] = []
-
-    @model_validator(mode="before")
-    @classmethod
-    def _check_discriminator(cls, data):
-        keys = cls._discriminator_keys
-        if keys and isinstance(data, dict) and not any(k in data for k in keys):
-            raise ValueError(f"{cls.__name__} requires at least one of: {keys}")
-        return data
+    model_config = ConfigDict(extra="forbid")
+    id: Optional[str] = None
+    extension: Optional[List[dict]] = None
 
 
 
@@ -91,6 +85,8 @@ class Ratio(FhirBaseModel):
     denominator: Optional[Quantity] = None
     # FHIR requires both or neither, but relaxed here so partial Ratios still
     # match this type and _compact_ratio returns "" to signal "return raw".
+    # Adding validation here would cause partial Ratios to fall through to
+    # generic dict recursion, producing half-compacted dicts like {"numerator": "1 mg"}.
 
 
 
@@ -101,8 +97,18 @@ class Period(FhirBaseModel):
     @model_validator(mode="after")
     def _require_start_lt_end(self):
         if self.start and self.end:
-            if str(self.start) >= str(self.end):
-                raise ValueError("Period.start must be earlier than Period.end")
+            def _to_dt(v: Union[str, date, datetime]) -> datetime:
+                if isinstance(v, datetime):
+                    return v
+                if isinstance(v, date):
+                    return datetime(v.year, v.month, v.day)
+                return datetime.fromisoformat(str(v))
+            try:
+                if _to_dt(self.start) > _to_dt(self.end):
+                    raise ValueError("Period.start must not be later than Period.end")
+            except ValueError as exc:
+                if "Period.start" in str(exc):
+                    raise
         return self
 
 
@@ -189,9 +195,13 @@ class Attachment(FhirBaseModel):
         return value
 
     @model_validator(mode="after")
-    def _require_content_type_with_data(self):
+    def _validate(self):
         if self.data is not None and not self.contentType:
             raise ValueError("Attachment.contentType is required when data is present")
+        # Reject extension-shaped dicts: url-only with no Attachment content fields
+        content_fields = [self.contentType, self.data, self.title, self.size, self.hash, self.language, self.creation]
+        if self.url and not any(f is not None for f in content_fields):
+            raise ValueError("Attachment requires at least one content field alongside url")
         return self
 
 
@@ -267,23 +277,3 @@ class Timing(FhirBaseModel):
     repeat: Optional[TimingRepeat] = None
     event: Optional[List[Union[str, date, datetime]]] = None
 
-
-_DISCRIMINATOR_KEYS: Dict[type, List[str]] = {
-    Ratio:           ["numerator", "denominator"],
-    Range:           ["low", "high"],
-    Money:           ["currency"],
-    Annotation:      ["authorString", "authorReference", "time"],
-    Period:          ["start", "end"],
-    HumanName:       ["text", "family", "given", "prefix", "suffix"],
-    Address:         ["text", "line", "city", "district", "state", "postalCode", "country"],
-    Coding:          ["code", "display"],
-    CodeableConcept: ["text", "coding"],
-    Quantity:        ["value", "comparator", "unit"],
-    Attachment:      ["contentType", "url", "data", "title", "hash", "size", "language", "creation"],
-    ContactPoint:    ["system", "value", "rank", "period"],
-    Identifier:      ["system", "value", "type", "use", "period", "assigner"],
-    Timing:          ["code", "repeat", "event"],
-}
-
-for _cls, _keys in _DISCRIMINATOR_KEYS.items():
-    _cls._discriminator_keys = _keys

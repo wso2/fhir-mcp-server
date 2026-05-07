@@ -475,7 +475,11 @@ class TestFilterMetadataStripping:
     """Test of filter_resource_fields: no expressions, json_output=False strips meta/text."""
 
     def setup_method(self):
+        self._original_json_output = utils_module.configs.json_output
         utils_module.configs.json_output = False
+
+    def teardown_method(self):
+        utils_module.configs.json_output = self._original_json_output
 
     PATIENT_WITH_META = {
         "resourceType": "Patient",

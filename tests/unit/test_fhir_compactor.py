@@ -321,6 +321,90 @@ class TestCompactResourceList:
         assert compact_resource(data) == {"resourceType": "Patient", "valueQuantity": "7.2 cm"}
 
 
+class TestCompactExtension:
+    # us-core-interpreter-needed — flat valueCoding extension
+    INTERPRETER_NEEDED = {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-interpreter-needed",
+        "valueCoding": {
+            "system": "http://snomed.info/sct",
+            "version": "http://snomed.info/sct/731000124108",
+            "code": "373066001",
+        },
+    }
+
+    # us-core-race — nested extension with repeated ombCategory sub-URLs
+    RACE = {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [
+            {"url": "ombCategory", "valueCoding": {"system": "urn:oid:2.16.840.1.113883.6.238", "code": "2106-3", "display": "White"}},
+            {"url": "ombCategory", "valueCoding": {"system": "urn:oid:2.16.840.1.113883.6.238", "code": "1002-5", "display": "American Indian or Alaska Native"}},
+            {"url": "ombCategory", "valueCoding": {"system": "urn:oid:2.16.840.1.113883.6.238", "code": "2028-9", "display": "Asian"}},
+            {"url": "detailed", "valueCoding": {"system": "urn:oid:2.16.840.1.113883.6.238", "code": "1586-7", "display": "Shoshone"}},
+            {"url": "detailed", "valueCoding": {"system": "urn:oid:2.16.840.1.113883.6.238", "code": "2036-2", "display": "Filipino"}},
+            {"url": "text", "valueString": "Mixed"},
+        ],
+    }
+
+    # us-core-tribal-affiliation — nested with valueCodeableConcept and valueBoolean
+    TRIBAL_AFFILIATION = {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-tribal-affiliation",
+        "extension": [
+            {
+                "url": "tribalAffiliation",
+                "valueCodeableConcept": {
+                    "coding": [{"system": "http://terminology.hl7.org/CodeSystem/v3-TribalEntityUS", "code": "187", "display": "Paiute-Shoshone Tribe of the Fallon Reservation and Colony, Nevada"}],
+                    "text": "Shoshone",
+                },
+            },
+            {"url": "isEnrolled", "valueBoolean": False},
+        ],
+    }
+
+    def test_flat_extension_returns_url_pipe_value(self):
+        result = compact_resource(self.INTERPRETER_NEEDED)
+        assert result == "http://hl7.org/fhir/us/core/StructureDefinition/us-core-interpreter-needed|http://snomed.info/sct|373066001"
+
+    def test_nested_extension_returns_dict_keyed_by_sub_url(self):
+        result = compact_resource(self.RACE)
+        assert isinstance(result, dict)
+        assert result["url"] == "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race"
+        assert result["text"] == "Mixed"
+
+    def test_repeated_sub_url_becomes_list(self):
+        result = compact_resource(self.RACE)
+        assert isinstance(result["ombCategory"], list)
+        assert result["ombCategory"] == ["White (2106-3)", "American Indian or Alaska Native (1002-5)", "Asian (2028-9)"]
+        assert isinstance(result["detailed"], list)
+        assert result["detailed"] == ["Shoshone (1586-7)", "Filipino (2036-2)"]
+
+    def test_nested_extension_with_codeable_concept_and_boolean(self):
+        result = compact_resource(self.TRIBAL_AFFILIATION)
+        assert isinstance(result, dict)
+        assert result["url"] == "http://hl7.org/fhir/us/core/StructureDefinition/us-core-tribal-affiliation"
+        assert result["tribalAffiliation"] == "Shoshone"
+        assert result["isEnrolled"] == "False"
+
+    def test_unresolvable_nested_extension_returns_raw(self):
+        data = {"url": "http://example.org/ext", "extension": []}
+        result = compact_resource(data)
+        assert result == data
+
+    def test_sub_extension_value_that_compacts_to_dict_is_dropped(self):
+        # valueX that compact_resource cannot reduce to a string (unrecognized dict)
+        # _extract_extension_value returns "" → sub-extension is skipped
+        data = {
+            "url": "http://example.org/ext",
+            "extension": [
+                {"url": "known", "valueString": "hello"},
+                {"url": "unknown", "valueX": {"foo": "bar", "baz": 1}},
+            ],
+        }
+        result = compact_resource(data)
+        assert isinstance(result, dict)
+        assert result["known"] == "hello"
+        assert "unknown" not in result
+
+
 class TestCompactTiming:
     def test_code_text_used_verbatim(self):
         v = {"code": {"text": "Take medication in the morning on weekends"}}
