@@ -23,7 +23,7 @@ FhirBaseModel because any FHIR element may carry them.
 """
 
 import base64
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import ClassVar, Dict, List, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
@@ -89,7 +89,6 @@ class Ratio(FhirBaseModel):
     # generic dict recursion, producing half-compacted dicts like {"numerator": "1 mg"}.
 
 
-
 class Period(FhirBaseModel):
     start: Optional[Union[str, date, datetime]] = None
     end: Optional[Union[str, date, datetime]] = None
@@ -99,10 +98,16 @@ class Period(FhirBaseModel):
         if self.start and self.end:
             def _to_dt(v: Union[str, date, datetime]) -> datetime:
                 if isinstance(v, datetime):
-                    return v
-                if isinstance(v, date):
-                    return datetime(v.year, v.month, v.day)
-                return datetime.fromisoformat(str(v))
+                    dt = v
+                elif isinstance(v, date):
+                    dt = datetime(v.year, v.month, v.day)
+                else:
+                    dt = datetime.fromisoformat(str(v))
+                
+                # Normalize to UTC-naive for safe ordering comparisons.
+                if dt.tzinfo is not None:
+                    return dt.astimezone(timezone.utc).replace(tzinfo=None)
+                return dt
             try:
                 if _to_dt(self.start) > _to_dt(self.end):
                     raise ValueError("Period.start must not be later than Period.end")

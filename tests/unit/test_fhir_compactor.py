@@ -159,6 +159,37 @@ class TestPeriodValidation:
         p = Period.model_validate({"start": "2024-01-01", "end": "2024-01-01"})
         assert p.start == p.end
 
+    def test_period_datetime_validation(self):
+        from fhir_mcp_server.fhir_complex_data_types import Period
+        from datetime import datetime
+        p = Period.model_validate({"start": datetime(2024, 1, 1, 10), "end": datetime(2024, 1, 1, 12)})
+        assert p.start == datetime(2024, 1, 1, 10)
+
+
+    def test_mixed_timezone_awareness(self):
+        from datetime import date, timezone
+        from fhir_mcp_server.fhir_complex_data_types import Period
+        # This used to raise a TypeError due to naive vs aware comparison
+        p = Period.model_validate({
+            "start": "2024-01-01T00:00:00+00:00",
+            "end": date(2024, 1, 2)
+        })
+        assert p.start == "2024-01-01T00:00:00+00:00"
+        
+        # Test reverse valid order
+        p2 = Period.model_validate({
+            "start": date(2024, 1, 1),
+            "end": "2024-01-02T00:00:00+05:30"
+        })
+        assert p2.start == date(2024, 1, 1)
+
+        # Test invalid order raises ValueError
+        from pydantic import ValidationError
+        with pytest.raises(ValidationError, match="must not be later"):
+            Period.model_validate({
+                "start": "2024-01-02T00:00:00+00:00",
+                "end": date(2024, 1, 1)
+            })
 
 class TestCompactRatio:
     def test_numerator_and_denominator(self):
@@ -343,6 +374,11 @@ class TestCompactAttachment:
         a = Attachment.model_validate({"contentType": "application/pdf", "hash": "not-valid-base64!!!"})
         assert a.hash == "not-valid-base64!!!".encode("utf-8")
 
+    def test_attachment_hash_data_non_string(self):
+        from fhir_mcp_server.fhir_complex_data_types import Attachment
+        import pytest
+        with pytest.raises(Exception):
+            Attachment.model_validate({"contentType": "text/plain", "hash": {"dict": 1}, "data": {"dict": 2}})
 
 class TestCompactAnnotation:
     def test_text_only(self):
@@ -490,6 +526,14 @@ class TestCompactExtension:
     def test_multiple_value_keys_returns_raw(self):
         data = {"url": "http://example.org/ext", "valueString": "a", "valueInteger": 1}
         assert compact_resource(data) == data
+    
+    def test_extract_extension_value_list(self):
+        from fhir_mcp_server.fhir_compactor import _extract_extension_value
+        assert _extract_extension_value({"valueList": [1, 2]}) == ""
+
+    def test_compact_extension_nested_not_dict(self):
+        from fhir_mcp_server.fhir_compactor import _compact_extension
+        assert _compact_extension({"url": "x", "extension": ["string"]}) == ""
 
 
 class TestCompactTiming:
@@ -640,26 +684,98 @@ class TestTimingRepeatValidation:
             TimingRepeat.model_validate({"offset": 10, "when": ["CM"]})
 
 
-class TestFilterByFhirpathWithCompaction:
-    OBSERVATION = {
-        "resourceType": "Observation",
-        "id": "o1",
-        "code": {"coding": [{"system": "http://loinc.org", "code": "8302-2", "display": "Body Height"}], "text": "Body Height"},
-        "valueQuantity": {"value": 170.5, "unit": "cm"},
-        "effectivePeriod": {"start": "2024-01-01", "end": "2024-01-01"},
-    }
-
-    # def test_compact_types_true_compacts_matched_values(self):
-    #     result = filter_by_fhirpath(self.OBSERVATION, ["Observation.code", "Observation.valueQuantity"])
-    #     assert result["Observation.code"] == ["Body Height"]
-    #     assert result["Observation.valueQuantity"] == ["170.5 cm"]
-
-    # def test_compact_types_false_returns_raw_dicts(self):
-    #     result = filter_by_fhirpath(self.OBSERVATION, ["Observation.code", "Observation.valueQuantity"])
-    #     assert isinstance(result["Observation.code"][0], dict)
-    #     assert isinstance(result["Observation.valueQuantity"][0], dict)
-
-    # def test_compact_types_defaults_to_true(self):
-    #     result = filter_by_fhirpath(self.OBSERVATION, ["Observation.code"])
-    #     assert result["Observation.code"] == ["Body Height"]
+class TestObservationCompaction:
+    # Test on an official example
+    def test_us_core_blood_pressure(self):
+        import json
+        from fhir_mcp_server.fhir_compactor import compact_resource
+        
+        # The exact US Core Blood Pressure JSON payload
+        payload = {
+            "resourceType" : "Observation",
+            "id" : "blood-pressure",
+            "meta" : {
+                "profile" : ["http://hl7.org/fhir/us/core/StructureDefinition/us-core-blood-pressure|9.0.0"]
+            },
+            "text" : {
+                "status" : "generated",
+                "div" : "<div xmlns=\"http://www.w3.org/1999/xhtml\"><p class=\"res-header-id\"><b>Generated Narrative: Observation blood-pressure</b></p><a name=\"blood-pressure\"> </a><a name=\"hcblood-pressure\"> </a><div style=\"display: inline-block; background-color: #d9e0e7; padding: 6px; margin: 4px; border: 1px solid #8da1b4; border-radius: 5px; line-height: 60%\"><p style=\"margin-bottom: 0px\"/><p style=\"margin-bottom: 0px\">Profile: <a href=\"StructureDefinition-us-core-blood-pressure.html\">US Core Blood Pressure Profile</a> version: 9.0.0</p></div><p><b>status</b>: Final</p><p><b>category</b>: <span title=\"Codes:{http://terminology.hl7.org/CodeSystem/observation-category vital-signs}\">Vital Signs</span></p><p><b>code</b>: <span title=\"Codes:{http://loinc.org 85354-9}\">Blood pressure systolic and diastolic</span></p><p><b>subject</b>: <a href=\"Patient-example.html\">Amy Shaw</a></p><p><b>encounter</b>: GP Visit</p><p><b>effective</b>: 1999-07-02</p><p><b>performer</b>: <a href=\"Practitioner-practitioner-1.html\">Dr Ronald Bone</a></p><blockquote><p><b>component</b></p><p><b>code</b>: <span title=\"Codes:{http://loinc.org 8480-6}\">Systolic blood pressure</span></p><p><b>value</b>: 109 mmHg<span style=\"background: LightGoldenRodYellow\"> (Details: UCUM  codemm[Hg] = 'mm[Hg]')</span></p></blockquote><blockquote><p><b>component</b></p><p><b>code</b>: <span title=\"Codes:{http://loinc.org 8462-4}\">Diastolic blood pressure</span></p><p><b>value</b>: 44 mmHg<span style=\"background: LightGoldenRodYellow\"> (Details: UCUM  codemm[Hg] = 'mm[Hg]')</span></p></blockquote></div>"
+            },
+            "status" : "final",
+            "category" : [{
+                "coding" : [{
+                "system" : "http://terminology.hl7.org/CodeSystem/observation-category",
+                "code" : "vital-signs",
+                "display" : "Vital Signs"
+                }],
+                "text" : "Vital Signs"
+            }],
+            "code" : {
+                "coding" : [{
+                "system" : "http://loinc.org",
+                "code" : "85354-9",
+                "display" : "Blood pressure panel with all children optional"
+                }],
+                "text" : "Blood pressure systolic and diastolic"
+            },
+            "subject" : {
+                "reference" : "Patient/example",
+                "display" : "Amy Shaw"
+            },
+            "encounter" : {
+                "display" : "GP Visit"
+            },
+            "effectiveDateTime" : "1999-07-02",
+            "performer" : [{
+                "reference" : "Practitioner/practitioner-1",
+                "display" : "Dr Ronald Bone"
+            }],
+            "component" : [{
+                "code" : {
+                "coding" : [{
+                    "system" : "http://loinc.org",
+                    "code" : "8480-6",
+                    "display" : "Systolic blood pressure"
+                }],
+                "text" : "Systolic blood pressure"
+                },
+                "valueQuantity" : {
+                "value" : 109,
+                "unit" : "mmHg",
+                "system" : "http://unitsofmeasure.org",
+                "code" : "mm[Hg]"
+                }
+            },
+            {
+                "code" : {
+                "coding" : [{
+                    "system" : "http://loinc.org",
+                    "code" : "8462-4",
+                    "display" : "Diastolic blood pressure"
+                }],
+                "text" : "Diastolic blood pressure"
+                },
+                "valueQuantity" : {
+                "value" : 44,
+                "unit" : "mmHg",
+                "system" : "http://unitsofmeasure.org",
+                "code" : "mm[Hg]"
+                }
+            }]                
+        }
+        
+        result = compact_resource(payload)
+        
+        assert result["resourceType"] == "Observation"
+        assert result["code"] == "Blood pressure systolic and diastolic"
+        assert result["category"] == ["Vital Signs"]
+        
+        # Components should be cleanly flattened
+        assert len(result["component"]) == 2
+        
+        assert result["component"][0]["code"] == "Systolic blood pressure"
+        assert result["component"][0]["valueQuantity"] == "109 mmHg"
+        
+        assert result["component"][1]["code"] == "Diastolic blood pressure"
+        assert result["component"][1]["valueQuantity"] == "44 mmHg"
 

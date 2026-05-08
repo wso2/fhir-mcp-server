@@ -17,9 +17,9 @@
 """
 Token-efficient compaction of FHIR General-Purpose Data Types.
 
-Each type is detected with a lightweight key-presence guard, then confirmed
-via Pydantic model_validate. The resulting typed object is used by the
-compactor to produce a short, human-readable string.
+Each type is detected and confirmed via Pydantic model_validate.
+The resulting typed object is used by the compactor to produce a short,
+human-readable string.
 """
 
 import base64

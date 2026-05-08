@@ -196,7 +196,6 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                 examples=["Patient", "Observation", "Encounter"],
             ),
         ],
-
     ) -> Annotated[
         Dict[str, Any],
         Field(
@@ -389,7 +388,6 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                 )
             ),
         ] = False,
-
     ) -> Annotated[
         Dict[str, Any],
         Field(
@@ -499,7 +497,6 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                 examples=["$evaluate"],
             ),
         ] = "",
-
     ) -> Annotated[
         Dict[str, Any],
         Field(

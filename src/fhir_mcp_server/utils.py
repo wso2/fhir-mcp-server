@@ -195,6 +195,9 @@ def filter_resource_fields(data: Any, field_paths: List[str] | None = None, _dep
     if _depth > MAX_RECURSION_DEPTH_FOR_FILTERING:  # cap recursion to guard against infinite loops in malformed nested Bundles
         return data
     
+    if isinstance(data, list):
+        return [filter_resource_fields(item, field_paths, _depth + 1) for item in data]
+
     if isinstance(data, dict):
         # Case 2a: Bundle — filter bundle-level fields, then recurse into each entry
         if data.get("resourceType") == "Bundle":
