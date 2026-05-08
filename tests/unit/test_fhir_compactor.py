@@ -89,6 +89,12 @@ class TestCompactQuantity:
     def test_unit_only_no_value(self):
         assert compact_resource({"unit": "cm"}) == "cm"
 
+    def test_code_without_system_raises(self):
+        from pydantic import ValidationError
+        from fhir_mcp_server.fhir_complex_data_types import Quantity
+        with pytest.raises(ValidationError, match="system is required when code is present"):
+            Quantity.model_validate({"value": 1.0, "code": "mg"})
+
 
 class TestCompactQuantitySubtypes:
     def test_age(self):
@@ -122,6 +128,36 @@ class TestCompactRange:
     def test_only_high(self):
         v = {"high": {"value": 5.5, "unit": "mmol/L"}}
         assert compact_resource(v) == "5.5 mmol/L"
+
+    def test_equal_bounds_allowed(self):
+        from fhir_mcp_server.fhir_complex_data_types import Range, Quantity
+        r = Range.model_validate({"low": {"value": 5.0}, "high": {"value": 5.0}})
+        assert r.low.value == r.high.value
+
+    def test_low_greater_than_high_raises(self):
+        from pydantic import ValidationError
+        from fhir_mcp_server.fhir_complex_data_types import Range
+        with pytest.raises(ValidationError, match="must not be greater than"):
+            Range.model_validate({"low": {"value": 6.0}, "high": {"value": 5.0}})
+
+
+class TestPeriodValidation:
+    def test_date_objects_accepted(self):
+        from datetime import date
+        from fhir_mcp_server.fhir_complex_data_types import Period
+        p = Period.model_validate({"start": date(2024, 1, 1), "end": date(2024, 6, 1)})
+        assert p.start == date(2024, 1, 1)
+
+    def test_start_after_end_raises(self):
+        from pydantic import ValidationError
+        from fhir_mcp_server.fhir_complex_data_types import Period
+        with pytest.raises(ValidationError, match="must not be later"):
+            Period.model_validate({"start": "2024-06-01", "end": "2024-01-01"})
+
+    def test_equal_start_end_allowed(self):
+        from fhir_mcp_server.fhir_complex_data_types import Period
+        p = Period.model_validate({"start": "2024-01-01", "end": "2024-01-01"})
+        assert p.start == p.end
 
 
 class TestCompactRatio:
@@ -272,6 +308,41 @@ class TestCompactAttachment:
         v = {"contentType": "image/png", "data": base64.b64encode(raw).decode()}
         assert compact_resource(v) == f"data:image/png;base64,{base64.b64encode(raw).decode()}"
 
+    def test_data_without_content_type_raises(self):
+        import base64
+        from pydantic import ValidationError
+        from fhir_mcp_server.fhir_complex_data_types import Attachment
+        with pytest.raises(ValidationError, match="contentType is required when data is present"):
+            Attachment.model_validate({"data": base64.b64encode(b"hello").decode()})
+
+    def test_url_without_content_fields_raises(self):
+        from pydantic import ValidationError
+        from fhir_mcp_server.fhir_complex_data_types import Attachment
+        with pytest.raises(ValidationError, match="requires at least one content field"):
+            Attachment.model_validate({"url": "http://example.com/doc.pdf"})
+
+    def test_hash_bytes_passthrough(self):
+        from fhir_mcp_server.fhir_complex_data_types import Attachment
+        raw_hash = b"\xde\xad\xbe\xef"
+        a = Attachment.model_validate({"contentType": "application/pdf", "hash": raw_hash})
+        assert a.hash == raw_hash
+
+    def test_data_bytes_passthrough(self):
+        from fhir_mcp_server.fhir_complex_data_types import Attachment
+        raw = b"raw bytes"
+        a = Attachment.model_validate({"contentType": "application/pdf", "data": raw})
+        assert a.data == raw
+
+    def test_invalid_base64_data_falls_back_to_utf8_encode(self):
+        from fhir_mcp_server.fhir_complex_data_types import Attachment
+        a = Attachment.model_validate({"contentType": "text/plain", "data": "not-valid-base64!!!"})
+        assert a.data == "not-valid-base64!!!".encode("utf-8")
+
+    def test_invalid_base64_hash_falls_back_to_utf8_encode(self):
+        from fhir_mcp_server.fhir_complex_data_types import Attachment
+        a = Attachment.model_validate({"contentType": "application/pdf", "hash": "not-valid-base64!!!"})
+        assert a.hash == "not-valid-base64!!!".encode("utf-8")
+
 
 class TestCompactAnnotation:
     def test_text_only(self):
@@ -404,6 +475,22 @@ class TestCompactExtension:
         assert result["known"] == "hello"
         assert "unknown" not in result
 
+    def test_float_value_in_extension(self):
+        data = {"url": "http://example.org/ext", "valueDecimal": 3.14}
+        assert compact_resource(data) == "http://example.org/ext|3.14"
+
+    def test_int_value_in_extension(self):
+        data = {"url": "http://example.org/ext", "valueInteger": 42}
+        assert compact_resource(data) == "http://example.org/ext|42"
+
+    def test_no_value_keys_returns_raw(self):
+        data = {"url": "http://example.org/ext"}
+        assert compact_resource(data) == data
+
+    def test_multiple_value_keys_returns_raw(self):
+        data = {"url": "http://example.org/ext", "valueString": "a", "valueInteger": 1}
+        assert compact_resource(data) == data
+
 
 class TestCompactTiming:
     def test_code_text_used_verbatim(self):
@@ -485,6 +572,72 @@ class TestCompactTiming:
     def test_offset_with_when_no_duration(self):
         v = {"repeat": {"offset": 10, "when": ["AC"]}}
         assert compact_resource(v) == "10min before meal"
+
+    def test_empty_timing_returns_raw(self):
+        v = {}
+        assert compact_resource(v) == v
+
+
+class TestTimingRepeatValidation:
+    def test_negative_duration_raises(self):
+        from pydantic import ValidationError
+        from fhir_mcp_server.fhir_complex_data_types import TimingRepeat
+        with pytest.raises(ValidationError, match="duration must be non-negative"):
+            TimingRepeat.model_validate({"duration": -1, "durationUnit": "min"})
+
+    def test_duration_without_unit_raises(self):
+        from pydantic import ValidationError
+        from fhir_mcp_server.fhir_complex_data_types import TimingRepeat
+        with pytest.raises(ValidationError, match="durationUnit is required"):
+            TimingRepeat.model_validate({"duration": 5})
+
+    def test_negative_period_raises(self):
+        from pydantic import ValidationError
+        from fhir_mcp_server.fhir_complex_data_types import TimingRepeat
+        with pytest.raises(ValidationError, match="period must be non-negative"):
+            TimingRepeat.model_validate({"period": -1, "periodUnit": "d"})
+
+    def test_period_without_unit_raises(self):
+        from pydantic import ValidationError
+        from fhir_mcp_server.fhir_complex_data_types import TimingRepeat
+        with pytest.raises(ValidationError, match="periodUnit is required"):
+            TimingRepeat.model_validate({"period": 1})
+
+    def test_period_max_without_period_raises(self):
+        from pydantic import ValidationError
+        from fhir_mcp_server.fhir_complex_data_types import TimingRepeat
+        with pytest.raises(ValidationError, match="period is required when periodMax"):
+            TimingRepeat.model_validate({"periodMax": 2, "periodUnit": "d"})
+
+    def test_duration_max_without_duration_raises(self):
+        from pydantic import ValidationError
+        from fhir_mcp_server.fhir_complex_data_types import TimingRepeat
+        with pytest.raises(ValidationError, match="duration is required when durationMax"):
+            TimingRepeat.model_validate({"durationMax": 10, "durationUnit": "min"})
+
+    def test_count_max_without_count_raises(self):
+        from pydantic import ValidationError
+        from fhir_mcp_server.fhir_complex_data_types import TimingRepeat
+        with pytest.raises(ValidationError, match="count is required when countMax"):
+            TimingRepeat.model_validate({"countMax": 5})
+
+    def test_time_of_day_with_when_raises(self):
+        from pydantic import ValidationError
+        from fhir_mcp_server.fhir_complex_data_types import TimingRepeat
+        with pytest.raises(ValidationError, match="timeOfDay cannot be used with when"):
+            TimingRepeat.model_validate({"timeOfDay": ["08:00:00"], "when": ["MORN"]})
+
+    def test_offset_without_when_raises(self):
+        from pydantic import ValidationError
+        from fhir_mcp_server.fhir_complex_data_types import TimingRepeat
+        with pytest.raises(ValidationError, match="when is required when offset"):
+            TimingRepeat.model_validate({"offset": 15})
+
+    def test_offset_with_disallowed_when_code_raises(self):
+        from pydantic import ValidationError
+        from fhir_mcp_server.fhir_complex_data_types import TimingRepeat
+        with pytest.raises(ValidationError, match="cannot include C, CM, CD, or CV"):
+            TimingRepeat.model_validate({"offset": 10, "when": ["CM"]})
 
 
 class TestFilterByFhirpathWithCompaction:

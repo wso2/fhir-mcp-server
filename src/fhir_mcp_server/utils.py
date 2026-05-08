@@ -217,8 +217,8 @@ def filter_resource_fields(data: Any, field_paths: List[str] | None = None, _dep
     return data
 
 def get_default_excluded_fields() -> Set[str]:
-    """Return fields to drop by default. Empty if json_output=true"""
-    if configs.json_output:
+    """Return fields to drop by default. Empty if mcp_json_output=true"""
+    if configs.mcp_json_output:
         return set()
     return {"meta", "text"}
 
@@ -228,7 +228,7 @@ def format_response(data: Any, field_paths: List[str] | None = None) -> str | An
     - Default mode: LLM friendly ( field filtering + metadata filter + compact complex type + toon format)
     - JSON output mode: only apply field filtering
     """
-    if configs.json_output:
+    if configs.mcp_json_output:
         return filter_resource_fields(data, field_paths) if field_paths else data
     return toon_encode(compact_resource(filter_resource_fields(data, field_paths)))
 

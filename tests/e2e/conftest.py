@@ -94,7 +94,7 @@ def _start_mcp_server(port: int, extra_env: dict) -> subprocess.Popen:
 @pytest_asyncio.fixture
 async def mcp_server() -> AsyncGenerator[bool, Any]:
     """MCP server with JSON output on port 8001."""
-    process = _start_mcp_server(8001, {"FHIR_JSON_OUTPUT": "true"})
+    process = _start_mcp_server(8001, {"FHIR_MCP_JSON_OUTPUT": "true"})
     yield True
     logger.info("Terminating MCP server (json output).")
     process.terminate()
@@ -104,7 +104,7 @@ async def mcp_server() -> AsyncGenerator[bool, Any]:
 @pytest_asyncio.fixture
 async def mcp_server_token_efficient() -> AsyncGenerator[bool, Any]:
     """MCP server with token efficient output on port 8002."""
-    process = _start_mcp_server(8002, {"FHIR_JSON_OUTPUT": "false"})
+    process = _start_mcp_server(8002, {"FHIR_MCP_JSON_OUTPUT": "false"})
     yield True
     logger.info("Terminating MCP server (token efficient output).")
     process.terminate()

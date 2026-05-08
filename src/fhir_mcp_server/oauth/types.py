@@ -51,7 +51,7 @@ class ServerConfigs(BaseSettings):
     server_disable_authorization: bool = False
 
     # Output settings
-    json_output: bool = False
+    mcp_json_output: bool = False
 
     def callback_url(
         self, server_url: str, suffix: str = "/oauth/callback"

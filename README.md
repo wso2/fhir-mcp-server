@@ -61,9 +61,9 @@ https://github.com/user-attachments/assets/96b433f1-3e53-4564-8466-65ab48d521de
 
 - **Tool integration**: Integratable with any MCP client such as VS Code, Claude Desktop, and MCP Inspector
 
-- **Response format**: Tools accept a `fmt` parameter (`toon` by default, or `json`) — TOON is a token-efficient format optimised for LLM consumption
+- **LLM-friendly token-efficient output**: Responses strip noise fields, compact FHIR complex types into human-readable strings, and encode output in [TOON format](https://toonformat.dev) to minimize token usage.
 
-- **FHIRPath field filtering**: Tools accept a `fields` parameter containing FHIRPath expressions to return only the fields needed, reducing response size and token usage
+- **Targeted field selection**: Request only the fields your task needs using the `fields` parameter on `search` and `read`, keeping irrelevant data out of the LLM context and reducing token usage (e.g., `["Patient.name", "Patient.birthDate"]`).
 
 ## Prerequisites
 
@@ -406,6 +406,7 @@ uv run fhir-mcp-server --help
 - `FHIR_MCP_PORT`: The port on which the MCP server will listen for incoming client requests (e.g., `8000`).
 - `FHIR_MCP_SERVER_URL`: If set, this value will be used as the server's base URL instead of generating it from host and port. Useful for custom URL configurations or when behind a proxy.
 - `FHIR_MCP_REQUEST_TIMEOUT`: Timeout duration in seconds for requests from the MCP server to the FHIR server (default: `30`).
+- `FHIR_MCP_JSON_OUTPUT`: If set to `True`, tool responses are returned as raw JSON instead of the default LLM-friendly token-efficient format.
 
 **MCP Server OAuth2 with FHIR server Configuration (MCP Client ↔ MCP Server):**
 These variables configure the MCP client's secure connection to the MCP server, using the OAuth2 authorization code grant flow with a FHIR server.
@@ -425,12 +426,15 @@ These variables configure the MCP client's secure connection to the MCP server, 
 - `search`: Executes a standard FHIR search interaction on a given resource type, returning a bundle or list of matching resources.
     - `type`: The FHIR resource type name (e.g., "MedicationRequest", "Condition", "Procedure").
     - `searchParam`: A mapping of FHIR search parameter names to their desired values (e.g., {"family":"Simpson","birthdate":"1956-05-12"}).
+    - `fields`: FHIRPath expressions to filter which fields to return, reducing response size and token usage (e.g., `['Condition.code', 'Condition.clinicalStatus', 'Bundle.total']`). Omit to return the full resource.
 
 - `read`: Performs a FHIR "read" interaction to retrieve a single resource instance by its type and resource ID, optionally refining the response with search parameters or custom operations.
     - `type`: The FHIR resource type name (e.g., "DiagnosticReport", "AllergyIntolerance", "Immunization").
     - `id`: The logical ID of a specific FHIR resource instance.
+    - `fields`: FHIRPath expressions to filter which fields to return, reducing response size and token usage (e.g., `['Condition.code', 'Condition.clinicalStatus', 'Bundle.total']`). Omit to return the full resource.
     - `searchParam`: A mapping of FHIR search parameter names to their desired values (e.g., {"device-name":"glucometer"}).
     - `operation`: The name of a custom FHIR operation or extended query defined for the resource (e.g., "$everything").
+    - `raw_json`: When `true`, returns the complete unmodified FHIR JSON without any formatting or compaction. Useful to retrieve the full payload to modify before calling `update`.
 
 - `create`: Executes a FHIR "create" interaction to persist a new resource of the specified type.
     - `type`: The FHIR resource type name (e.g., "Device", "CarePlan", "Goal").
@@ -448,7 +452,7 @@ These variables configure the MCP client's secure connection to the MCP server, 
 - `delete`: Execute a FHIR "delete" interaction on a specific resource instance.
     - `type`: The FHIR resource type name (e.g., "ServiceRequest", "Appointment", "HealthcareService").
     - `id`: The logical ID of a specific FHIR resource instance.
-    - `searchParam`: A mapping of FHIR search parameter names to their desired values (e.g., {"category":"laboratory","issued:"2025-05-01"}).
+    - `searchParam`: A mapping of FHIR search parameter names to their desired values (e.g., {"category":"laboratory","issued":"2025-05-01"}).
     - `operation`: The name of a custom FHIR operation or extended query defined for the resource (e.g., "$expand").
 
 - `get_user`: Retrieves the currently authenticated user's FHIR resource (for example the linked `Patient` resource) and returns a concise profile containing available demographic fields such as `id`, `name`, and `birthDate`.

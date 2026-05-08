@@ -356,6 +356,15 @@ class TestFilterByFhirpath:
         "valueQuantity": {"value": 7.2, "unit": "mmol/L"},
     }
 
+    PATIENT_MULTI_NAME = {
+        "resourceType": "Patient",
+        "id": "p2",
+        "name": [
+            {"use": "official", "family": "Smith"},
+            {"use": "nickname", "family": "Smitty"},
+        ],
+    }
+
     def test_non_dict_returns_unchanged(self):
         """Test that non-dict input is returned unchanged."""
         assert filter_resource_fields("raw string", ["Patient.name"]) == "raw string"
@@ -384,6 +393,13 @@ class TestFilterByFhirpath:
         assert "deceased" not in result
         assert "_unmatched" in result
         assert "Patient.deceased" in result["_unmatched"]
+
+    def test_where_clause_filters_by_condition(self):
+        result = filter_resource_fields(self.PATIENT_MULTI_NAME, ["Patient.name.where(use='official')"])
+        assert "name.where(use='official')" in result
+        matched = result["name.where(use='official')"]
+        assert len(matched) == 1
+        assert matched[0]["family"] == "Smith"
 
     def test_empty_string_expression_skipped(self):
         """Test that empty string expressions are skipped without raising errors."""
@@ -455,6 +471,10 @@ class TestFilterByFhirpath:
         assert "valueQuantity" in obs_entry
         assert "name" not in obs_entry
 
+    def test_primitive_with_field_paths_returned_unchanged(self):
+        assert filter_resource_fields("raw-string", ["Patient.name"]) == "raw-string"
+        assert filter_resource_fields(42, ["Patient.name"]) == 42
+
     def test_bundle_unprefixed_expression_does_not_pollute_wrapper(self):
         """Unprefixed expressions should filter entry resources but not add _unmatched to the Bundle wrapper."""
         bundle = {
@@ -471,14 +491,14 @@ class TestFilterByFhirpath:
 
 
 class TestFilterMetadataStripping:
-    """Test of filter_resource_fields: no expressions, json_output=False strips meta/text."""
+    """Test of filter_resource_fields: no expressions, mcp_json_output=False strips meta/text."""
 
     def setup_method(self):
-        self._original_json_output = utils_module.configs.json_output
-        utils_module.configs.json_output = False
+        self._original_mcp_json_output = utils_module.configs.mcp_json_output
+        utils_module.configs.mcp_json_output = False
 
     def teardown_method(self):
-        utils_module.configs.json_output = self._original_json_output
+        utils_module.configs.mcp_json_output = self._original_mcp_json_output
 
     PATIENT_WITH_META = {
         "resourceType": "Patient",
@@ -537,6 +557,23 @@ class TestFilterMetadataStripping:
         result = filter_resource_fields(bundle, [])
         assert result["entry"][0] == {"fullUrl": "http://example.com/Patient/p1"}
 
+    def test_list_input_recurses_and_strips_meta(self):
+        data = [
+            {"resourceType": "Patient", "id": "p1", "gender": "male", "meta": {"versionId": "1"}},
+            {"resourceType": "Patient", "id": "p2", "text": {"status": "generated", "div": "<div/>"}},
+        ]
+        result = filter_resource_fields(data)
+        assert "meta" not in result[0]
+        assert "text" not in result[1]
+        assert result[0]["gender"] == "male"
+
+    def test_none_field_paths_behaves_same_as_empty(self):
+        patient = {**self.PATIENT_WITH_META}
+        result_none = filter_resource_fields(patient, None)
+        result_empty = filter_resource_fields(patient, [])
+        assert result_none == result_empty
+        assert "meta" not in result_none
+
 
 class TestFormatResponse:
     """Test the format_response function."""
@@ -544,25 +581,25 @@ class TestFormatResponse:
     PATIENT = {"resourceType": "Patient", "id": "p1"}
 
     def test_json_output_no_fields_returns_data_unchanged(self):
-        utils_module.configs.json_output = True
+        utils_module.configs.mcp_json_output = True
         try:
             assert format_response(self.PATIENT) is self.PATIENT
         finally:
-            utils_module.configs.json_output = False
+            utils_module.configs.mcp_json_output = False
 
     def test_json_output_with_fields_filters_data(self):
         patient = {**self.PATIENT, "meta": {"versionId": "1"}, "gender": "male"}
-        utils_module.configs.json_output = True
+        utils_module.configs.mcp_json_output = True
         try:
             result = format_response(patient, ["Patient.gender"])
             assert "gender" in result
             assert "meta" not in result
         finally:
-            utils_module.configs.json_output = False
+            utils_module.configs.mcp_json_output = False
 
     def test_toon_output_returns_string(self):
         """Test that json_output=False returns a non-empty string."""
-        utils_module.configs.json_output = False
+        utils_module.configs.mcp_json_output = False
         result = format_response(self.PATIENT)
         assert isinstance(result, str)
         assert len(result) > 0
@@ -570,7 +607,22 @@ class TestFormatResponse:
     def test_toon_output_is_not_json(self):
         """Test that toon output is not valid JSON."""
         import json
-        utils_module.configs.json_output = False
+        utils_module.configs.mcp_json_output = False
         result = format_response(self.PATIENT)
         with pytest.raises(json.JSONDecodeError):
             json.loads(result)
+
+    def test_toon_output_with_field_paths_includes_requested_field(self):
+        patient = {**self.PATIENT, "gender": "male", "birthDate": "1990-01-01"}
+        utils_module.configs.mcp_json_output = False
+        result = format_response(patient, ["Patient.gender"])
+        assert "gender" in result
+        assert "birthDate" not in result
+
+    def test_toon_output_with_field_paths_excludes_meta(self):
+        patient = {**self.PATIENT, "gender": "male", "meta": {"versionId": "1"}}
+        utils_module.configs.mcp_json_output = False
+        result = format_response(patient, ["Patient.gender"])
+        assert "meta" not in result
+
+

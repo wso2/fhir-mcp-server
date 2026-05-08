@@ -75,8 +75,8 @@ class Range(FhirBaseModel):
         if self.low and self.high:
             low_value = self.low.value
             high_value = self.high.value
-            if low_value is not None and high_value is not None and low_value >= high_value:
-                raise ValueError("Range.low must be lower than Range.high")
+            if low_value is not None and high_value is not None and low_value > high_value:
+                raise ValueError("Range.low must not be greater than Range.high")
         return self
 
 
