@@ -126,6 +126,7 @@ def configure_mcp_server() -> FastMCP:
         logger.debug("Enabling authorization for FHIR MCP server.")
         auth_settings: AuthSettings = AuthSettings(
             issuer_url=AnyHttpUrl(configs.effective_server_url),
+            resource_server_url=AnyHttpUrl(f"{configs.effective_server_url}"),
             client_registration_options=ClientRegistrationOptions(
                 enabled=True,
                 valid_scopes=configs.scopes,
