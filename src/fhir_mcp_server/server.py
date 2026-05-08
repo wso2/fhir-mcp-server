@@ -380,6 +380,15 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                 examples=["$everything"],
             ),
         ] = "",
+        raw_json: Annotated[
+            bool,
+            Field(
+                description=(
+                    "When true, returns the complete unmodified FHIR JSON without any formatting or compaction. "
+                    "Use this only when to read the full resource before update."
+                )
+            ),
+        ] = False,
 
     ) -> Annotated[
         Dict[str, Any],
@@ -402,6 +411,9 @@ def register_mcp_tools(mcp: FastMCP) -> None:
             bundle: dict = await client.resource(resource_type=type, id=id).execute(
                 operation=operation or "", method="GET", params=searchParam
             )
+
+            if raw_json:
+                return bundle
 
             return format_response(bundle, fields)
         except ResourceNotFound as ex:
@@ -545,8 +557,9 @@ def register_mcp_tools(mcp: FastMCP) -> None:
             "Performs a FHIR `update` interaction by replacing an existing resource instance's content with the provided payload. "
             "Use it when you need to overwrite a resource's data in its entirety, such as correcting or completing a record, "
             "and you already know the resource's logical id. "
+            "Before calling this tool, you MUST call read with raw_json=true and apply your changes to that payload. "
             "Optionally, you can include searchParam for conditional updates (e.g., only update if the resource matches certain criteria) "
-            "or specify a custom operation (e.g., `$validate` to run validation before updating) "
+            "or specify a custom operation (e.g., `$validate` to run validation before updating). "
             "The tool returns the updated resource or an OperationOutcome detailing any errors."
         )
     )
