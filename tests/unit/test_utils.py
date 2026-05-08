@@ -160,9 +160,9 @@ class TestTrimResource:
         result = trim_resource_capabilities(operations)
         
         assert len(result) == 3
-        assert result[0] == {"name": "read", "documentation": "Read operation"}
-        assert result[1] == {"name": "search", "documentation": "Search operation"}
-        assert result[2] == {"name": "create", "documentation": None}
+        assert result[0] == "read"
+        assert result[1] == "search"
+        assert result[2] == "create"
 
     def test_trim_resource_empty_list(self):
         """Test trimming empty operations list."""
@@ -183,7 +183,7 @@ class TestTrimResource:
         result = trim_resource_capabilities(operations)
         
         assert len(result) == 1
-        assert result[0] == {"name": "read", "documentation": "Read operation"}
+        assert result[0] == "read"
 
     def test_trim_resource_missing_required_fields(self):
         """Test trimming operations missing name and documentation."""
@@ -195,9 +195,8 @@ class TestTrimResource:
         
         result = trim_resource_capabilities(operations)
         
-        assert len(result) == 2
-        assert result[0] == {"name": "search", "documentation": None}
-        assert result[1] == {"name": None, "documentation": "Create operation"}
+        assert len(result) == 1
+        assert result[0] == "search"
 
 
 class TestOperationOutcomeGenerators:
@@ -573,5 +572,5 @@ class TestFormatResponse:
         import json
         utils_module.configs.json_output = False
         result = format_response(self.PATIENT)
-        with pytest.raises(Exception):
+        with pytest.raises(json.JSONDecodeError):
             json.loads(result)

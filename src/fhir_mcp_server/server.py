@@ -180,7 +180,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
     @mcp.tool(
         description=(
             "Retrieves metadata about a specified FHIR resource type, including its supported search parameters and custom operations. "
-            "This tool MUST always be invoked before performing any resource operation (such as search, read, create, update, or delete) "
+            "This tool MUST always be invoked before performing search or operations ($everything, etc.) interactions on a resource type "
             "to discover the valid searchParams and operations permitted for that resource type. "
             "Do not use this tool to fetch actual resources."
         )
@@ -203,10 +203,8 @@ def register_mcp_tools(mcp: FastMCP) -> None:
             description=(
                 "A dictionary containing: "
                 "'type': The requested resource type (if supported by the system) or empty. "
-                "'searchParam': A mapping of FHIR search parameter names to their descriptions. Each key is a parameter name "
-                "(e.g., family, _id, _lastUpdated), and each value is a string describing the parameter's meaning and usage constraints. "
-                "'operation': A mapping of custom FHIR operation names to their descriptions. Each key is an operation name "
-                "(e.g., $validate), and each value is a string explaining the operation's purpose and usage. "
+                "'searchParam': A list of supported FHIR search parameter names (e.g., family, _id, _lastUpdated). "
+                "'operation': A list of supported custom FHIR operation names (e.g., $validate, $everything). "
                 "'interaction': A list of supported interactions for the resource type (e.g., read, search-type, create). "
                 "'searchInclude': A list of supported _include parameters for the resource type, indicating which related resources can be included. "
                 "'searchRevInclude': A list of supported _revinclude parameters for the resource type, indicating which reverse-included resources can be included."

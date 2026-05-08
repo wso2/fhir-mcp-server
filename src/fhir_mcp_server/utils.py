@@ -69,18 +69,11 @@ async def get_bundle_entries(bundle: Dict[str, Any]) -> Dict[str, Any]:
 
 def trim_resource_capabilities(
     capabilities: List[Dict[str, Any]],
-) -> List[Dict[str, Optional[str]]]:
+) -> List[Optional[str]]:
     logger.debug(
         f"trim_resource_capabilities called with {len(capabilities)} capabilities."
     )
-    trimmed = [
-        {
-            "name": capability.get("name"),
-            "documentation": capability.get("documentation"),
-        }
-        for capability in capabilities
-        if "name" in capability or "documentation" in capability
-    ]
+    trimmed = [capability.get("name") for capability in capabilities if "name" in capability]
     logger.debug(
         f"trim_resource_capabilities returning {len(trimmed)} trimmed capabilities."
     )
