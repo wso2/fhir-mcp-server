@@ -28,6 +28,12 @@ from fhir_mcp_server.utils import (
     get_capability_statement,
     trim_resource_capabilities,
 )
+from fhir_mcp_server.extensions.promptopinion_fhir_context import (
+    PromptOpinionFastMCP,
+    apply_promptopinion_patches,
+    get_promptopinion_fhir_context,
+    resolve_promptopinion_scopes_for_initialize,
+)
 from fhir_mcp_server.oauth import (
     handle_failed_authentication,
     OAuthServerProvider,
@@ -60,6 +66,16 @@ async def get_user_access_token() -> OAuthToken | None:
     Retrieve the access token for the authenticated user.
     Returns an OAuthToken if available, otherwise raises an error.
     """
+    if configs.promptopinion_fhir_context_enabled:
+        po_ctx = get_promptopinion_fhir_context()
+        if po_ctx and po_ctx.is_complete_for_fhir():
+            logger.debug("Using PromptOpinion FHIR context access token.")
+            return OAuthToken(
+                access_token=po_ctx.access_token,
+                token_type="Bearer",
+                client_id=configs.server_client_id,
+            )
+
     if configs.server_access_token:
         logger.debug("Using configured FHIR access token for user.")
         return OAuthToken(
@@ -90,8 +106,16 @@ async def get_async_fhir_client() -> AsyncFHIRClient:
     Get an async FHIR client with the user's access token.
     Returns an AsyncFHIRClient instance.
     """
+    fhir_config: ServerConfigs = configs
+    if configs.promptopinion_fhir_context_enabled:
+        po_ctx = get_promptopinion_fhir_context()
+        if po_ctx and po_ctx.is_complete_for_fhir():
+            fhir_config = configs.model_copy(
+                update={"server_base_url": po_ctx.server_url.rstrip("/")}
+            )
+
     client_kwargs: Dict = {
-        "config": configs,
+        "config": fhir_config,
         "extra_headers": get_default_headers(),
     }
 
@@ -136,7 +160,18 @@ def configure_mcp_server() -> FastMCP:
         fastmcp_kwargs["auth"] = auth_settings
     else:
         logger.warning("MCP authentication is disabled.")
-    return FastMCP(**fastmcp_kwargs)
+
+    mcp_cls = (
+        PromptOpinionFastMCP
+        if configs.promptopinion_fhir_context_enabled
+        else FastMCP
+    )
+    mcp: FastMCP = mcp_cls(**fastmcp_kwargs)
+    if configs.promptopinion_fhir_context_enabled:
+        apply_promptopinion_patches(
+            mcp, resolve_promptopinion_scopes_for_initialize(configs)
+        )
+    return mcp
 
 
 def register_mcp_routes(
@@ -213,7 +248,20 @@ def register_mcp_tools(mcp: FastMCP) -> None:
     ]:
         try:
             logger.debug(f"Invoked with resource_type='{type}'")
-            data: Dict[str, Any] = await get_capability_statement(configs.metadata_url)
+            metadata_headers: Dict[str, str] = {}
+            base_url = configs.server_base_url.rstrip("/")
+            if configs.promptopinion_fhir_context_enabled:
+                po_ctx = get_promptopinion_fhir_context()
+                if po_ctx and po_ctx.is_complete_for_fhir():
+                    base_url = po_ctx.server_url.rstrip("/")
+                    metadata_headers["Authorization"] = (
+                        f"Bearer {po_ctx.access_token}"
+                    )
+            metadata_url = f"{base_url}/metadata?_format=json"
+            data: Dict[str, Any] = await get_capability_statement(
+                metadata_url,
+                extra_request_headers=metadata_headers if metadata_headers else None,
+            )
             for resource in data["rest"][0]["resource"]:
                 if resource.get("type") == type:
                     logger.info(
@@ -715,27 +763,44 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                 logger.debug("Unauthorized access attempt to get_me endpoint.")
                 return {}
 
-            # Retrieve token metadata
-            token_metadata = server_provider.token_metadata_mapping.get(
-                user_token.access_token
-            )
-            if not token_metadata:
-                logger.debug("Token metadata not found for authenticated user.")
-                return {}
+            resource_type: str | None = None
+            resource_id: str | None = None
 
-            # Extract ID token information
-            id_token = token_metadata.get_id_token()
-            if not id_token:
-                logger.debug("ID token not found in token metadata.")
-                return {}
+            if configs.promptopinion_fhir_context_enabled:
+                po_ctx = get_promptopinion_fhir_context()
+                if po_ctx and po_ctx.patient_id:
+                    raw_pid = po_ctx.patient_id.strip()
+                    if "/" in raw_pid:
+                        resource_type, resource_id = raw_pid.split("/", 1)
+                        resource_type, resource_id = (
+                            resource_type.strip(),
+                            resource_id.strip(),
+                        )
+                    else:
+                        resource_type, resource_id = "Patient", raw_pid
 
-            # Validate resource identifiers
-            resource_id = id_token.resource_id
-            resource_type = id_token.resource_type
+            if not resource_type or not resource_id:
+                # Retrieve token metadata
+                token_metadata = server_provider.token_metadata_mapping.get(
+                    user_token.access_token
+                )
+                if not token_metadata:
+                    logger.debug("Token metadata not found for authenticated user.")
+                    return {}
 
-            if not resource_id or not resource_type:
-                logger.debug("Resource ID or type missing from ID token.")
-                return {}
+                # Extract ID token information
+                id_token = token_metadata.get_id_token()
+                if not id_token:
+                    logger.debug("ID token not found in token metadata.")
+                    return {}
+
+                # Validate resource identifiers
+                resource_id = id_token.resource_id
+                resource_type = id_token.resource_type
+
+                if not resource_id or not resource_type:
+                    logger.debug("Resource ID or type missing from ID token.")
+                    return {}
 
             logger.debug(f"Fetching FHIR resource: {resource_type}/{resource_id}")
 

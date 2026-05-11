@@ -50,6 +50,17 @@ class ServerConfigs(BaseSettings):
     server_access_token: str | None = None
     server_disable_authorization: bool = False
 
+    # PromptOpinion-style FHIR context (HTTP headers + MCP capability extension)
+    promptopinion_fhir_context_enabled: bool = False
+    """When True, advertise ai.promptopinion/fhir-context and honor X-FHIR-* headers per request."""
+
+    promptopinion_fhir_context_scopes_json: str = ""
+    """
+    JSON array of {"name": "scope/name", "required": true|false} for the MCP extension.
+    If empty while the extension is enabled, scopes are derived from FHIR_SERVER_SCOPES,
+    or default to patient/Patient.rs (required).
+    """
+
     def callback_url(
         self, server_url: str, suffix: str = "/oauth/callback"
     ) -> AnyHttpUrl:
