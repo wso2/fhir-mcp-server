@@ -434,7 +434,6 @@ These variables configure the MCP client's secure connection to the MCP server, 
     - `fields`: FHIRPath expressions to filter which fields to return, reducing response size and token usage (e.g., `['Condition.code', 'Condition.clinicalStatus', 'Bundle.total']`). Omit to return the full resource.
     - `searchParam`: A mapping of FHIR search parameter names to their desired values (e.g., {"device-name":"glucometer"}).
     - `operation`: The name of a custom FHIR operation or extended query defined for the resource (e.g., "$everything").
-    - `raw_json`: When `true`, returns the complete unmodified FHIR JSON without any formatting or compaction. Useful to retrieve the full payload to modify before calling `update`.
 
 - `create`: Executes a FHIR "create" interaction to persist a new resource of the specified type.
     - `type`: The FHIR resource type name (e.g., "Device", "CarePlan", "Goal").

@@ -18,13 +18,9 @@ import aiohttp
 import logging
 import fhirpathpy
 
-from functools import lru_cache
-
 from toon_format import encode as toon_encode
 from fhir_mcp_server.oauth import ServerConfigs
 from fhir_mcp_server.fhir_compactor import compact_resource
-
-configs: ServerConfigs = ServerConfigs()
 
 from typing import Any, Dict, List, Optional, Set
 from fhirpy import AsyncFHIRClient
@@ -33,6 +29,7 @@ from mcp.shared._httpx_utils import create_mcp_http_client
 logger: logging.Logger = logging.getLogger(__name__)
 
 MAX_RECURSION_DEPTH_FOR_FILTERING = 10
+
 
 async def create_async_fhir_client(
     config: ServerConfigs,
@@ -73,7 +70,9 @@ def trim_resource_capabilities(
     logger.debug(
         f"trim_resource_capabilities called with {len(capabilities)} capabilities."
     )
-    trimmed = [capability.get("name") for capability in capabilities if "name" in capability]
+    trimmed = [
+        capability.get("name") for capability in capabilities if "name" in capability
+    ]
     logger.debug(
         f"trim_resource_capabilities returning {len(trimmed)} trimmed capabilities."
     )
@@ -126,40 +125,38 @@ async def get_capability_statement(metadata_url: str) -> Dict[str, Any]:
         raise ValueError("Unable to fetch FHIR metadata")
 
 
-@lru_cache(maxsize=256)
-def _compile_fhirpath(expr: str):
-    return fhirpathpy.compile(expr)
-
-
 def _filter_with_fhirpath(
-        resource: Dict[str, Any],
-        field_paths: List[str]
-    ) -> Dict[str, Any]:
+    resource: Dict[str, Any], field_paths: List[str]
+) -> Dict[str, Any]:
     """Apply FHIRPath expressions to a single FHIR resource. Always includes id and resourceType."""
 
     is_bundle = resource.get("resourceType") == "Bundle"
 
     result: Dict[str, Any]
     if is_bundle:
-        result: Dict[str, Any] = {}  # bundle id/resourceType are not useful — caller must request via Bundle.id etc.
+        result = {}
     else:
-        result: Dict[str, Any] = {k: resource[k] for k in ("id", "resourceType") if k in resource}  # keep id and resourceType
+        result: Dict[str, Any] = {
+            k: resource[k] for k in ("id", "resourceType") if k in resource
+        }  # keep id and resourceType
 
     resource_type = resource.get("resourceType", "")
     unmatched: List[str] = []
     errors: List[str] = []
 
     for expr in field_paths:
-
-        # skip empty, wrong-type prefixed, or unprefixed expressions on Bundle wrapper
         prefix = expr.split(".")[0]
-        if not prefix or (prefix[0].isupper() and prefix != resource_type) or (is_bundle and prefix[0].islower()):
+        if (
+            not prefix
+            or (prefix[0].isupper() and prefix != resource_type)
+            or (is_bundle and prefix[0].islower())
+        ):
             continue
         try:
-            matched = _compile_fhirpath(expr)(resource)
+            matched = fhirpathpy.evaluate(resource, expr)
             if matched:
-                key = expr[len(prefix) + 1:] if prefix == resource_type else expr # strip resourceType prefix in key if present, e.g. "Patient.name" -> "name"
-                result[key] = matched  # e.g. {"valueQuantity": [{"value": 7.2, "unit": "mmol/L"}]}
+                key = expr[len(prefix) + 1 :] if prefix == resource_type else expr
+                result[key] = matched
             else:
                 unmatched.append(expr)
         except Exception as e:
@@ -172,67 +169,71 @@ def _filter_with_fhirpath(
     return result
 
 
-def filter_resource_fields(data: Any, field_paths: List[str] | None = None, _depth: int = 0) -> Any:
+def filter_resource_fields(
+    data: Any, field_paths: List[str] | None = None, _depth: int = 0
+) -> Any:
     """
     Strip default excluded fields (meta, text) when no expressions given; .
     If field_paths provided, apply FHIRPath filtering to include only specified fields, always keeping id and resourceType.
     For Bundles, field_paths are applied at the Bundle wrapper level (e.g. Bundle.id) and then recursively to each entry.resource (e.g. Bundle.entry.resource.Patient.name).
     """
 
-    # Case 1: field_paths empty -> strip always-excluded fields at resource level only
     if not field_paths:
         if isinstance(data, dict):
-            if "resourceType" in data:  # resource level (Patient, Observation, Bundle etc.) — strip excluded fields
-                return {k: filter_resource_fields(v, field_paths) for k, v in data.items() if k not in get_default_excluded_fields()}
-            if "resource" in data and isinstance(data["resource"], dict):  # bundle entry wrapper — recurse into inner resource
-                return {**data, "resource": filter_resource_fields(data["resource"], field_paths)}
-            return data  # nested data type (CodeableConcept, Quantity etc.) — leave untouched
-        if isinstance(data, list):  # bundle entry list — recurse into each item to reach resource level
+            if "resourceType" in data:
+                return {
+                    k: filter_resource_fields(v, field_paths)
+                    for k, v in data.items()
+                    if k not in get_default_excluded_fields()
+                }
+            if "resource" in data and isinstance(data["resource"], dict):
+                return {
+                    **data,
+                    "resource": filter_resource_fields(data["resource"], field_paths),
+                }
+            return data
+        if isinstance(data, list):
             return [filter_resource_fields(item, field_paths) for item in data]
-        return data  # primitive — return as is
-
-    # Case 2: field_paths provided -> apply FHIRPath filtering
-    if _depth > MAX_RECURSION_DEPTH_FOR_FILTERING:  # cap recursion to guard against infinite loops in malformed nested Bundles
         return data
-    
+
+    if _depth > MAX_RECURSION_DEPTH_FOR_FILTERING:
+        return data
+
     if isinstance(data, list):
         return [filter_resource_fields(item, field_paths, _depth + 1) for item in data]
 
     if isinstance(data, dict):
-        # Case 2a: Bundle — filter bundle-level fields, then recurse into each entry
         if data.get("resourceType") == "Bundle":
             result = _filter_with_fhirpath(data, field_paths)
-            result["entry"] = [filter_resource_fields(entry, field_paths, _depth + 1) for entry in data.get("entry", [])]
+            result["entry"] = [
+                filter_resource_fields(entry, field_paths, _depth + 1)
+                for entry in data.get("entry", [])
+            ]
             return result
 
-        # Case 2b: entry wrapper {"fullUrl", "resource", "search"} — filter the inner resource, preserve search mode
         if "resource" in data and isinstance(data["resource"], dict):
-            # raw bundle entry wrapper {"fullUrl": ..., "resource": {...}, "search": ...} — filter the resource inside
             result = _filter_with_fhirpath(data["resource"], field_paths)
 
             if "search" in data:
-                result["search"] = data["search"]  # preserve match/include mode for _include queries
+                result["search"] = data[
+                    "search"
+                ]  # preserve match/include mode for _include queries
             return result
 
-        # Case 2c: single resource — filter directly
         return _filter_with_fhirpath(data, field_paths)
 
     return data
 
+
 def get_default_excluded_fields() -> Set[str]:
-    """Return fields to drop by default. Empty if mcp_json_output=true"""
-    if configs.mcp_json_output:
-        return set()
+    """Return fields to drop by default."""
     return {"meta", "text"}
+
 
 def format_response(data: Any, field_paths: List[str] | None = None) -> str | Any:
     """
-    Format the FHIR response with filtering and output formatting.
-    - Default mode: LLM friendly ( field filtering + metadata filter + compact complex type + toon format)
-    - JSON output mode: only apply field filtering
+    Format the FHIR response with LLM friendly format with field filtering + metadata filter + compacting complex FHIR types + toon formating
     """
-    if configs.mcp_json_output:
-        return filter_resource_fields(data, field_paths) if field_paths else data
     return toon_encode(compact_resource(filter_resource_fields(data, field_paths)))
 
 

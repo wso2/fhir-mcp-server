@@ -1,4 +1,4 @@
-# Copyright (c) 2025, WSO2 LLC. (https://www.wso2.com/) All Rights Reserved.
+# Copyright (c) 2026, WSO2 LLC. (https://www.wso2.com/) All Rights Reserved.
 
 # WSO2 LLC. licenses this file to you under the Apache License,
 # Version 2.0 (the "License"); you may not use this file except
@@ -49,21 +49,48 @@ from pydantic import ValidationError
 # https://hl7.org/fhir/R4/valueset-event-timing.html
 # ---------------------------------------------------------------------------
 _EVENT_TIMING: Dict[str, str] = {
-    "MORN": "morning", "MORN.early": "early morning", "MORN.late": "late morning",
+    "MORN": "morning",
+    "MORN.early": "early morning",
+    "MORN.late": "late morning",
     "NOON": "noon",
-    "AFT": "afternoon", "AFT.early": "early afternoon", "AFT.late": "late afternoon",
-    "EVE": "evening", "EVE.early": "early evening", "EVE.late": "late evening",
-    "NIGHT": "night", "PHS": "after sleep",
-    "HS": "before sleep", "WAKE": "upon waking",
-    "C": "with meal", "CM": "at breakfast", "CD": "at lunch", "CV": "at dinner",
-    "AC": "before meal", "ACM": "before breakfast", "ACD": "before lunch", "ACV": "before dinner",
-    "PC": "after meal", "PCM": "after breakfast", "PCD": "after lunch", "PCV": "after dinner",
+    "AFT": "afternoon",
+    "AFT.early": "early afternoon",
+    "AFT.late": "late afternoon",
+    "EVE": "evening",
+    "EVE.early": "early evening",
+    "EVE.late": "late evening",
+    "NIGHT": "night",
+    "PHS": "after sleep",
+    "HS": "before sleep",
+    "WAKE": "upon waking",
+    "C": "with meal",
+    "CM": "at breakfast",
+    "CD": "at lunch",
+    "CV": "at dinner",
+    "AC": "before meal",
+    "ACM": "before breakfast",
+    "ACD": "before lunch",
+    "ACV": "before dinner",
+    "PC": "after meal",
+    "PCM": "after breakfast",
+    "PCD": "after lunch",
+    "PCV": "after dinner",
 }
 
+_UNIT_NAMES = {
+    "d": "day",
+    "wk": "wk",
+    "mo": "mo",
+    "h": "h",
+    "min": "min",
+    "s": "s",
+    "a": "yr",
+}
 
 # ---------------------------------------------------------------------------
 # Compactors — operate on validated Pydantic model objects
 # ---------------------------------------------------------------------------
+
 
 def _fmt_quantity(v: Quantity) -> str:
     """Shared helper for Quantity, Range, and Ratio. E.g. {"value": 40000, "comparator": ">", "unit": "mcg/L"} -> ">40000 mcg/L"."""
@@ -165,7 +192,11 @@ def _compact_address(v: Address) -> str:
     parts: List[str] = []
     if v.line:
         parts.append(", ".join(v.line))
-    location = " ".join(filter(None, [v.city or "", v.district or "", v.state or "", v.postalCode or ""]))
+    location = " ".join(
+        filter(
+            None, [v.city or "", v.district or "", v.state or "", v.postalCode or ""]
+        )
+    )
     if location:
         parts.append(location)
     if v.country:
@@ -218,9 +249,15 @@ def _compact_attachment(v: Attachment) -> str:
         return str(v.url)
     if v.data:
         ct = v.contentType or ""
-        if ct.startswith("text/"):  # decode to readable text; binary stays as data URI
-            return v.data.decode("utf-8", errors="replace")
-        b64 = base64.b64encode(v.data).decode("ascii")
+        data = v.data
+        if isinstance(data, str):
+            try:
+                data = base64.b64decode(data, validate=True)
+            except Exception:
+                data = data.encode("utf-8")
+        if ct.startswith("text/"):
+            return data.decode("utf-8", errors="replace")
+        b64 = base64.b64encode(data).decode("ascii")
         return f"data:{ct};base64,{b64}" if ct else b64
     return v.contentType or "[attachment]"
 
@@ -243,15 +280,25 @@ def _compact_timing(v: Timing) -> str:
 
         if r.period is not None or r.frequency is not None:
             unit = r.periodUnit or ""
-            _UNIT_NAMES = {"d": "day", "wk": "wk", "mo": "mo", "h": "h", "min": "min", "s": "s", "a": "yr"}
+
             freq = r.frequency
             freq_max = r.frequencyMax
-            freq_s = f"{freq}-{freq_max}" if freq_max else str(freq) if freq is not None else "1"
+            freq_s = (
+                f"{freq}-{freq_max}"
+                if freq_max
+                else str(freq)
+                if freq is not None
+                else "1"
+            )
             if r.period == 1 and not r.periodMax:
                 unit_name = _UNIT_NAMES.get(unit, unit)
                 parts.append(f"{freq_s}x/{unit_name}")
             else:
-                period_s = f"{r.period}-{r.periodMax}{unit}" if r.periodMax else f"{r.period}{unit}"
+                period_s = (
+                    f"{r.period}-{r.periodMax}{unit}"
+                    if r.periodMax
+                    else f"{r.period}{unit}"
+                )
                 if freq is not None and (freq > 1 or freq_max):
                     parts.append(f"{freq_s}x/{period_s}")
                 else:
@@ -259,7 +306,11 @@ def _compact_timing(v: Timing) -> str:
 
         if r.duration is not None:
             dur_unit = r.durationUnit or ""
-            dur_s = f"{r.duration}-{r.durationMax}{dur_unit}" if r.durationMax else f"{r.duration}{dur_unit}"
+            dur_s = (
+                f"{r.duration}-{r.durationMax}{dur_unit}"
+                if r.durationMax
+                else f"{r.duration}{dur_unit}"
+            )
             if r.offset is not None and r.when:
                 when_s = "/".join(_EVENT_TIMING.get(w, w) for w in r.when)
                 parts.append(f"for {dur_s}, {r.offset}min {when_s}")
@@ -278,11 +329,19 @@ def _compact_timing(v: Timing) -> str:
 
         if r.count is not None:
             count_s = f"{r.count}-{r.countMax}" if r.countMax else str(r.count)
-            parts.append(f"{count_s} time" if r.count == 1 and not r.countMax else f"{count_s} times")
+            parts.append(
+                f"{count_s} time"
+                if r.count == 1 and not r.countMax
+                else f"{count_s} times"
+            )
 
         if r.boundsDuration is not None:
             bd = r.boundsDuration
-            bd_s = f"{bd.value:g}{bd.unit or bd.code or ''}" if bd.value is not None else bd.unit or bd.code or ""
+            bd_s = (
+                f"{bd.value:g}{bd.unit or bd.code or ''}"
+                if bd.value is not None
+                else bd.unit or bd.code or ""
+            )
             parts.append(f"for {bd_s}")
         elif r.boundsRange is not None:
             parts.append(f"for {_compact_range(r.boundsRange)}")
@@ -295,7 +354,12 @@ def _compact_timing(v: Timing) -> str:
             return " ".join(parts)
 
     if v.event:
-        return ", ".join((e.isoformat() if hasattr(e, "isoformat") else str(e)).replace("+00:00", "Z") for e in v.event)
+        return ", ".join(
+            (e.isoformat() if hasattr(e, "isoformat") else str(e)).replace(
+                "+00:00", "Z"
+            )
+            for e in v.event
+        )
 
     return ""
 
@@ -363,7 +427,9 @@ def _compact_extension(data: dict) -> str | dict:
                     continue
                 if sub_url in result:
                     existing = result[sub_url]
-                    result[sub_url] = existing if isinstance(existing, list) else [existing]
+                    result[sub_url] = (
+                        existing if isinstance(existing, list) else [existing]
+                    )
                     result[sub_url].append(value_str)
                 else:
                     result[sub_url] = value_str
@@ -391,29 +457,33 @@ def compact_resource(data: Any) -> Any:
 
     if isinstance(data, list):  # FHIRPath returns lists — compact each matched value
         return [compact_resource(item) for item in data]
-    if not isinstance(data, dict):  # primitive (string, number, bool) — nothing to compact
+    if not isinstance(
+        data, dict
+    ):  # primitive (string, number, bool) — nothing to compact
         return data
 
     # Detect a FHIR Extension: every key is "url", "extension", or "value*"
-    if "url" in data and all(k == "url" or k == "extension" or k.startswith("value") for k in data):
+    if "url" in data and all(
+        k == "url" or k == "extension" or k.startswith("value") for k in data
+    ):
         result = _compact_extension(data)
         return result if result != "" else data
 
     for fhir_type, compactor in [
-        (Ratio,           _compact_ratio),
-        (Range,           _compact_range),
-        (Money,           _compact_money),
-        (Annotation,      _compact_annotation),
-        (Period,          _compact_period),
-        (HumanName,       _compact_human_name),
-        (Address,         _compact_address),
-        (Coding,          _compact_coding),
+        (Ratio, _compact_ratio),
+        (Range, _compact_range),
+        (Money, _compact_money),
+        (Annotation, _compact_annotation),
+        (Period, _compact_period),
+        (HumanName, _compact_human_name),
+        (Address, _compact_address),
+        (Coding, _compact_coding),
         (CodeableConcept, _compact_codeable_concept),
-        (Quantity,        _compact_quantity),
-        (Attachment,      _compact_attachment),
-        (ContactPoint,    _compact_contact_point),
-        (Identifier,      _compact_identifier),
-        (Timing,          _compact_timing),
+        (Quantity, _compact_quantity),
+        (Attachment, _compact_attachment),
+        (ContactPoint, _compact_contact_point),
+        (Identifier, _compact_identifier),
+        (Timing, _compact_timing),
     ]:
         try:
             result = compactor(fhir_type.model_validate(data))

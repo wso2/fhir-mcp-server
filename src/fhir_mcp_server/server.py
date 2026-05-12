@@ -251,8 +251,8 @@ def register_mcp_tools(mcp: FastMCP) -> None:
             "Executes a standard FHIR `search` interaction on a given resource type, returning a bundle or list of matching resources. "
             "Use this when you need to query for multiple resources based on one or more search-parameters. "
             "Do not use this tool for create, update, or delete operations, and be aware that large result sets may be paginated by the FHIR server. "
-            "Specify fields to keep responses focused — only the fields your task needs, leaving more context for reasoning (e.g., Patient.birthDate, Observation.valueQuantity)."
-            )
+            "Specify fields to keep responses focused — only the fields your task needs (e.g., Patient.birthDate, Observation.valueQuantity)."
+        )
     )
     async def search(
         type: Annotated[
@@ -279,10 +279,11 @@ def register_mcp_tools(mcp: FastMCP) -> None:
             List[str],
             Field(
                 description="FHIRPath expressions specifying which fields to return. Omitting returns the full resource.",
-                examples=[["Condition.code", "Condition.clinicalStatus","Bundle.total"]],
+                examples=[
+                    ["Condition.code", "Condition.clinicalStatus", "Bundle.total"]
+                ],
             ),
         ] = [],
-
     ) -> Annotated[
         list[Dict[str, Any]] | Dict[str, Any],
         Field(
@@ -296,7 +297,8 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                     "Unable to perform search operation: 'type' is a mandatory field."
                 )
                 return format_response(
-                    await get_operation_outcome_required_error("type"))
+                    await get_operation_outcome_required_error("type")
+                )
 
             client: AsyncFHIRClient = await get_async_fhir_client()
             async_resources: list[Any] = (
@@ -312,7 +314,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
             return format_response(
                 await get_operation_outcome(
                     code="forbidden",
-                    diagnostics=f"The user does not have the rights to perform search operation.",
+                    diagnostics="The user does not have the rights to perform search operation.",
                 )
             )
         except OperationOutcome as ex:
@@ -336,7 +338,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
             "optionally refining the response with search parameters or custom operations. "
             "Use it when you know the exact resource ID and require that one resource; do not use it for bulk queries. "
             "If additional query-level parameters or operations are needed (e.g., _elements or $validate), include them in searchParam or operation. "
-            "Specify fields to keep responses focused — only the fields your task needs, leaving more context for reasoning (e.g., Patient.birthDate, Observation.valueQuantity)."
+            "Specify fields to keep responses focused — only the fields your task needs (e.g., Patient.birthDate, Observation.valueQuantity)."
         )
     )
     async def read(
@@ -355,7 +357,9 @@ def register_mcp_tools(mcp: FastMCP) -> None:
             List[str],
             Field(
                 description="FHIRPath expressions specifying which fields to return to reduce token usage. Omitting returns the full resource. Bundle.* expressions supported with $everything.",
-                examples=[["Patient.name", "Patient.birthDate", "Observation.valueQuantity"]]
+                examples=[
+                    ["Patient.name", "Patient.birthDate", "Observation.valueQuantity"]
+                ],
             ),
         ] = [],
         searchParam: Annotated[
@@ -403,7 +407,8 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                     "Unable to perform read operation: 'type' is a mandatory field."
                 )
                 return format_response(
-                    await get_operation_outcome_required_error("type"))
+                    await get_operation_outcome_required_error("type")
+                )
 
             client: AsyncFHIRClient = await get_async_fhir_client()
             bundle: dict = await client.resource(resource_type=type, id=id).execute(
@@ -433,7 +438,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
             return format_response(
                 await get_operation_outcome(
                     code="forbidden",
-                    diagnostics=f"The user does not have the rights to perform read operation.",
+                    diagnostics="The user does not have the rights to perform read operation.",
                 )
             )
         except OperationOutcome as ex:
@@ -515,7 +520,8 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                     "Unable to perform create operation: 'type' is a mandatory field."
                 )
                 return format_response(
-                    await get_operation_outcome_required_error("type"))
+                    await get_operation_outcome_required_error("type")
+                )
 
             client: AsyncFHIRClient = await get_async_fhir_client()
             bundle: dict = await client.resource(resource_type=type).execute(
@@ -531,7 +537,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
             return format_response(
                 await get_operation_outcome(
                     code="forbidden",
-                    diagnostics=f"The user does not have the rights to perform create operation.",
+                    diagnostics="The user does not have the rights to perform create operation.",
                 )
             )
         except OperationOutcome as ex:
@@ -554,7 +560,6 @@ def register_mcp_tools(mcp: FastMCP) -> None:
             "Performs a FHIR `update` interaction by replacing an existing resource instance's content with the provided payload. "
             "Use it when you need to overwrite a resource's data in its entirety, such as correcting or completing a record, "
             "and you already know the resource's logical id. "
-            "Before calling this tool, you MUST call read with raw_json=true and apply your changes to that payload. "
             "Optionally, you can include searchParam for conditional updates (e.g., only update if the resource matches certain criteria) "
             "or specify a custom operation (e.g., `$validate` to run validation before updating). "
             "The tool returns the updated resource or an OperationOutcome detailing any errors."
@@ -603,7 +608,6 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                 examples=["$lastn"],
             ),
         ] = "",
-
     ) -> Annotated[
         Dict[str, Any],
         Field(description="A dictionary containing the updated FHIR resource"),
@@ -617,7 +621,8 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                     "Unable to perform update operation: 'type' is a mandatory field."
                 )
                 return format_response(
-                    await get_operation_outcome_required_error("type"))
+                    await get_operation_outcome_required_error("type")
+                )
 
             client: AsyncFHIRClient = await get_async_fhir_client()
             bundle: dict = await client.resource(resource_type=type, id=id).execute(
@@ -635,7 +640,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
             return format_response(
                 await get_operation_outcome(
                     code="forbidden",
-                    diagnostics=f"The user does not have the rights to perform update operation.",
+                    diagnostics="The user does not have the rights to perform update operation.",
                 )
             )
         except OperationOutcome as ex:
@@ -711,13 +716,13 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                     "Unable to perform delete operation: 'type' is a mandatory field."
                 )
                 return format_response(
-                    await get_operation_outcome_required_error("type"))
+                    await get_operation_outcome_required_error("type")
+                )
             if not id and not searchParam:
                 logger.error(
                     "Unable to perform delete operation: 'id' or 'searchParam' is required."
                 )
-                return format_response(
-                    await get_operation_outcome_required_error("id"))
+                return format_response(await get_operation_outcome_required_error("id"))
 
             client: AsyncFHIRClient = await get_async_fhir_client()
             bundle = await client.resource(resource_type=type, id=id).execute(
@@ -740,7 +745,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
             return format_response(
                 await get_operation_outcome(
                     code="forbidden",
-                    diagnostics=f"The user does not have the rights to perform delete operation.",
+                    diagnostics="The user does not have the rights to perform delete operation.",
                 )
             )
         except OperationOutcome as ex:
@@ -831,7 +836,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
 
         except OperationOutcome as ex:
             logger.exception(
-                f"FHIR server error occurred while reading user resource. Caused by, ",
+                "FHIR server error occurred while reading user resource. Caused by, ",
                 exc_info=ex,
             )
             return format_response(
@@ -878,7 +883,7 @@ def main(transport, log_level) -> int:
         mcp.run(transport=transport)
     except Exception as ex:
         logger.error(
-            f"Unable to run the FHIR MCP server. Caused by, %s", ex, exc_info=True
+            "Unable to run the FHIR MCP server. Caused by, %s", ex, exc_info=True
         )
         return 1
     return 0
