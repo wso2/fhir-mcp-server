@@ -106,14 +106,18 @@ async def get_operation_outcome(
     }
 
 
-async def get_capability_statement(metadata_url: str) -> Dict[str, Any]:
+async def get_capability_statement(
+    metadata_url: str,
+    extra_request_headers: Dict[str, str] | None = None,
+) -> Dict[str, Any]:
     """
     Discover CapabilityStatement from server's metadata endpoint.
     """
     try:
         logger.debug(f"Fetching CapabilityStatement from {metadata_url}")
+        headers = {**get_default_headers(), **(extra_request_headers or {})}
         async with create_mcp_http_client() as client:
-            response = await client.get(url=metadata_url, headers=get_default_headers())
+            response = await client.get(url=metadata_url, headers=headers)
             response.raise_for_status()
             metadata_json = response.json()
             logger.debug(f"OAuth metadata discovered: {metadata_json}")
