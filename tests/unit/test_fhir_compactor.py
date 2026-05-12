@@ -15,7 +15,7 @@
 # under the License.
 
 import pytest
-from fhir_mcp_server.fhir_compactor import compact_resource
+from fhir_mcp_server.compactor.dispatch import compact_resource
 
 
 class TestCompactCodeableConcept:
@@ -163,7 +163,7 @@ class TestCompactRange:
         assert compact_resource(v) == "5.5 mmol/L"
 
     def test_equal_bounds_allowed(self):
-        from fhir_mcp_server.fhir_complex_data_types import Range
+        from fhir_mcp_server.compactor.types.complex_types.range import Range
 
         r = Range.model_validate({"low": {"value": 5.0}, "high": {"value": 5.0}})
         assert r.low.value == r.high.value
@@ -172,19 +172,19 @@ class TestCompactRange:
 class TestPeriodValidation:
     def test_date_objects_accepted(self):
         from datetime import date
-        from fhir_mcp_server.fhir_complex_data_types import Period
+        from fhir_mcp_server.compactor.types.complex_types.period import Period
 
         p = Period.model_validate({"start": date(2024, 1, 1), "end": date(2024, 6, 1)})
         assert p.start == date(2024, 1, 1)
 
     def test_equal_start_end_allowed(self):
-        from fhir_mcp_server.fhir_complex_data_types import Period
+        from fhir_mcp_server.compactor.types.complex_types.period import Period
 
         p = Period.model_validate({"start": "2024-01-01", "end": "2024-01-01"})
         assert p.start == p.end
 
     def test_period_datetime_validation(self):
-        from fhir_mcp_server.fhir_complex_data_types import Period
+        from fhir_mcp_server.compactor.types.complex_types.period import Period
         from datetime import datetime
 
         p = Period.model_validate(
@@ -389,7 +389,7 @@ class TestCompactAttachment:
         )
 
     def test_hash_bytes_passthrough(self):
-        from fhir_mcp_server.fhir_complex_data_types import Attachment
+        from fhir_mcp_server.compactor.types.complex_types.attachment import Attachment
 
         raw_hash = b"\xde\xad\xbe\xef"
         a = Attachment.model_validate(
@@ -398,14 +398,14 @@ class TestCompactAttachment:
         assert a.hash == raw_hash
 
     def test_data_bytes_passthrough(self):
-        from fhir_mcp_server.fhir_complex_data_types import Attachment
+        from fhir_mcp_server.compactor.types.complex_types.attachment import Attachment
 
         raw = b"raw bytes"
         a = Attachment.model_validate({"contentType": "application/pdf", "data": raw})
         assert a.data == raw
 
     def test_attachment_hash_data_non_string(self):
-        from fhir_mcp_server.fhir_complex_data_types import Attachment
+        from fhir_mcp_server.compactor.types.complex_types.attachment import Attachment
 
         with pytest.raises(Exception):
             Attachment.model_validate(
@@ -632,14 +632,15 @@ class TestCompactExtension:
         assert compact_resource(data) == data
 
     def test_extract_extension_value_list(self):
-        from fhir_mcp_server.fhir_compactor import _extract_extension_value
+        from fhir_mcp_server.compactor.compactors.extension import _extract_extension_value
+        from fhir_mcp_server.compactor.types.complex_types.extension import Extension
 
-        assert _extract_extension_value({"valueList": [1, 2]}) == ""
+        ext = Extension.model_validate({"url": "x", "valueList": [1, 2]})
+        assert _extract_extension_value(ext) == ""
 
     def test_compact_extension_nested_not_dict(self):
-        from fhir_mcp_server.fhir_compactor import _compact_extension
-
-        assert _compact_extension({"url": "x", "extension": ["string"]}) == ""
+        v = {"url": "x", "extension": ["string"]}
+        assert compact_resource(v) == v
 
 
 class TestCompactTiming:
@@ -804,7 +805,7 @@ class TestCompactTiming:
 class TestRealWorldPayloads:
     # Test on an official example
     def test_us_core_blood_pressure(self):
-        from fhir_mcp_server.fhir_compactor import compact_resource
+        from fhir_mcp_server.compactor.dispatch import compact_resource
 
         # The exact US Core Blood Pressure JSON payload
         payload = {

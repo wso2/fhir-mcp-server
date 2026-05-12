@@ -20,7 +20,7 @@ import fhirpathpy
 
 from toon_format import encode as toon_encode
 from fhir_mcp_server.oauth import ServerConfigs
-from fhir_mcp_server.fhir_compactor import compact_resource
+from fhir_mcp_server.compactor.dispatch import compact_resource
 
 from typing import Any, Dict, List, Optional, Set
 from fhirpy import AsyncFHIRClient
