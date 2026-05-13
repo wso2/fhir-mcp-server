@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.12"
 
 [[package]]
@@ -81,6 +81,15 @@ source = { registry = "https://pypi.org/simple/" }
 sdist = { url = "https://files.pythonhosted.org/packages/ee/67/531ea369ba64dcff5ec9c3402f9f51bf748cec26dde048a2f973a4eea7f5/annotated_types-0.7.0.tar.gz", hash = "sha256:aff07c09a53a08bc8cfccb9c85b05f1aa9a2a6f23728d790723543408344ce89", size = 16081, upload-time = "2024-05-20T21:33:25.928Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/78/b6/6307fbef88d9b5ee7421e68d78a9f162e0da4900bc5f5793f6d3d0e34fb8/annotated_types-0.7.0-py3-none-any.whl", hash = "sha256:1f02e8b43a8fbbc3f3e0d4f0f4bfc8131bcb4eebe8849b8e5c773f3a1c582a53", size = 13643, upload-time = "2024-05-20T21:33:24.1Z" },
+]
+
+[[package]]
+name = "antlr4-python3-runtime"
+version = "4.13.2"
+source = { registry = "https://pypi.org/simple/" }
+sdist = { url = "https://files.pythonhosted.org/packages/33/5f/2cdf6f7aca3b20d3f316e9f505292e1f256a32089bd702034c29ebde6242/antlr4_python3_runtime-4.13.2.tar.gz", hash = "sha256:909b647e1d2fc2b70180ac586df3933e38919c85f98ccc656a96cd3f25ef3916", size = 117467, upload-time = "2024-08-03T19:00:12.757Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/89/03/a851e84fcbb85214dc637b6378121ef9a0dd61b4c65264675d8a5c9b1ae7/antlr4_python3_runtime-4.13.2-py3-none-any.whl", hash = "sha256:fe3835eb8d33daece0e799090eda89719dbccee7aa39ef94eed3818cafa5a7e8", size = 144462, upload-time = "2024-08-03T19:00:11.134Z" },
 ]
 
 [[package]]
@@ -215,12 +224,14 @@ wheels = [
 
 [[package]]
 name = "fhir-mcp-server"
-version = "0.9.0"
+version = "0.10.0"
 source = { editable = "." }
 dependencies = [
     { name = "aiohttp" },
+    { name = "fhirpathpy" },
     { name = "fhirpy" },
     { name = "mcp", extra = ["cli"] },
+    { name = "toon-format" },
 ]
 
 [package.optional-dependencies]
@@ -238,6 +249,7 @@ test = [
 [package.metadata]
 requires-dist = [
     { name = "aiohttp", specifier = "==3.12.13" },
+    { name = "fhirpathpy", specifier = "==2.2.0" },
     { name = "fhirpy", specifier = "==2.0.15" },
     { name = "mcp", extras = ["cli"], specifier = "==1.9.1" },
     { name = "pytest", marker = "extra == 'dev'", specifier = "==8.4.0" },
@@ -246,8 +258,22 @@ requires-dist = [
     { name = "pytest-asyncio", marker = "extra == 'test'", specifier = "==1.0.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = "==6.2.0" },
     { name = "pytest-cov", marker = "extra == 'test'", specifier = "==6.2.0" },
+    { name = "toon-format", specifier = "==0.9.0b1" },
 ]
 provides-extras = ["dev", "test"]
+
+[[package]]
+name = "fhirpathpy"
+version = "2.2.0"
+source = { registry = "https://pypi.org/simple/" }
+dependencies = [
+    { name = "antlr4-python3-runtime" },
+    { name = "python-dateutil" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/d3/32/64498a35630a6b518539a6901065e42c629bc1242e7bb9fe38843e47f0f9/fhirpathpy-2.2.0.tar.gz", hash = "sha256:efd70f0892eb20017460172242c4888f160b6544eaa8ccbd251380bdfe59e524", size = 218155, upload-time = "2026-04-16T13:08:59.506Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/90/de/e677ece27f4fc2f44444e324e3a871be89de83fc541151d0cc661a72b501/fhirpathpy-2.2.0-py3-none-any.whl", hash = "sha256:a59832507e5f805b3901aa68b6539688154b5a49977ecd075a16aea4ce9c6e05", size = 232543, upload-time = "2026-04-16T13:08:57.096Z" },
+]
 
 [[package]]
 name = "fhirpy"
@@ -695,6 +721,18 @@ wheels = [
 ]
 
 [[package]]
+name = "python-dateutil"
+version = "2.9.0.post0"
+source = { registry = "https://pypi.org/simple/" }
+dependencies = [
+    { name = "six" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/66/c0/0c8b6ad9f17a802ee498c46e004a0eb49bc148f2fd230864601a86dcf6db/python-dateutil-2.9.0.post0.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 342432, upload-time = "2024-03-01T18:36:20.211Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ec/57/56b9bcc3c9c6a792fcbaf139543cee77261f3651ca9da0c93f5c1221264b/python_dateutil-2.9.0.post0-py2.py3-none-any.whl", hash = "sha256:a8b2bc7bffae282281c8140a97d3aa9c14da0b136dfe83f850eea9a5f7470427", size = 229892, upload-time = "2024-03-01T18:36:18.57Z" },
+]
+
+[[package]]
 name = "python-dotenv"
 version = "1.1.0"
 source = { registry = "https://pypi.org/simple/" }
@@ -759,6 +797,15 @@ wheels = [
 ]
 
 [[package]]
+name = "six"
+version = "1.17.0"
+source = { registry = "https://pypi.org/simple/" }
+sdist = { url = "https://files.pythonhosted.org/packages/94/e7/b2c673351809dca68a0e064b6af791aa332cf192da575fd474ed7d6f16a2/six-1.17.0.tar.gz", hash = "sha256:ff70335d468e7eb6ec65b95b99d3a2836546063f63acc5171de367e834932a81", size = 34031, upload-time = "2024-12-04T17:35:28.174Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b7/ce/149a00dd41f10bc29e5921b496af8b574d8413afcd5e30dfa0ed46c2cc5e/six-1.17.0-py2.py3-none-any.whl", hash = "sha256:4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274", size = 11050, upload-time = "2024-12-04T17:35:26.475Z" },
+]
+
+[[package]]
 name = "sniffio"
 version = "1.3.1"
 source = { registry = "https://pypi.org/simple/" }
@@ -790,6 +837,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/ce/20/08dfcd9c983f6a6f4a1000d934b9e6d626cff8d2eeb77a89a68eef20a2b7/starlette-0.46.2.tar.gz", hash = "sha256:7f7361f34eed179294600af672f565727419830b54b7b084efe44bb82d2fccd5", size = 2580846, upload-time = "2025-04-13T13:56:17.942Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/8b/0c/9d30a4ebeb6db2b25a841afbb80f6ef9a854fc3b41be131d249a977b4959/starlette-0.46.2-py3-none-any.whl", hash = "sha256:595633ce89f8ffa71a015caed34a5b2dc1c0cdb3f0f1fbd1e69339cf2abeec35", size = 72037, upload-time = "2025-04-13T13:56:16.21Z" },
+]
+
+[[package]]
+name = "toon-format"
+version = "0.9.0b1"
+source = { registry = "https://pypi.org/simple/" }
+sdist = { url = "https://files.pythonhosted.org/packages/fa/15/d23d6d3e36aa4ec96dd5692bc7715fe17015b669e8f0d1c5c7fa906a3ceb/toon_format-0.9.0b1.tar.gz", hash = "sha256:8f391dd6ad9677c78366bd8eb6762d064a2183f67b9b7da1f348fdb6ee8738e7", size = 87398, upload-time = "2025-11-08T19:22:53.059Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/63/f3/27ab1d982bb81bf9ac5be70b4c774996eb8562b93c77e93c253c22be951f/toon_format-0.9.0b1-py3-none-any.whl", hash = "sha256:efeee919501f91137f017f7bed34789c067f76178111aa872a49bc8653dce3be", size = 36173, upload-time = "2025-11-08T19:22:51.523Z" },
 ]
 
 [[package]]

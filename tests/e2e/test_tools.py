@@ -53,9 +53,9 @@ async def test_tool_get_capabilities(mcp_server) -> None:
                 name="get_capabilities", arguments=request_payload
             )
 
-            response: Dict = await extract_resource(tool_result)
-            assert response.get("type") == "Patient", f"type is not Patient: {response}"
-            assert response.get("searchParam"), f"searchParam is empty: {response}"
+            response: str = await extract_resource(tool_result)
+            assert "type: Patient" in response, f"type is not Patient: {response[:300]}"
+            assert "searchParam" in response, f"searchParam is empty: {response[:300]}"
     except asyncio.TimeoutError as ex:
         logger.error(
             "[TOOL RESPONSE] Timeout waiting for get_capabilities response from MCP server",
@@ -72,10 +72,13 @@ async def patient_id(mcp_server) -> str | None:
         "payload": {
             "resourceType": "Patient",
             "gender": "male",
-            "name": {
-                "family": f"TestFamily-{suffix}",
-                "given": [f"TestGiven-{suffix}"],
-            },
+            "name": [
+                {
+                    "prefix": ["Mr."],
+                    "family": f"TestFamily-{suffix}",
+                    "given": ["TestGiven"],
+                }
+            ],
         },
     }
     logger.debug("[TOOL REQUEST] create:", request_payload)
@@ -85,15 +88,29 @@ async def patient_id(mcp_server) -> str | None:
                 name="create", arguments=request_payload
             )
 
-            response: Dict = await extract_resource(tool_result)
-            assert (
-                response.get("resourceType") == "Patient"
-            ), f"type is not Patient: {response}"
-            assert response.get("id"), f"id is missing in Patient resource: {response}"
-            assert (
-                response.get("gender") == "male"
-            ), f"gender field is invalid in Patient resource: {response}"
-            return response.get("id")
+            response: str = await extract_resource(tool_result)
+            assert "resourceType: Patient" in response, (
+                f"type is not Patient: {response[:300]}"
+            )
+            pid = next(
+                (
+                    line.split(": ", 1)[1].strip().strip('"')
+                    for line in response.splitlines()
+                    if line.startswith("id: ")
+                ),
+                None,
+            )
+            assert pid, f"id is missing in Patient resource: {response[:300]}"
+            assert "gender: male" in response, (
+                f"gender field is invalid in Patient resource: {response[:300]}"
+            )
+            assert "Mr. TestGiven" in response, (
+                f"HumanName not compacted in create response: {response[:300]}"
+            )
+            assert "meta:" not in response, (
+                f"meta should be stripped in create response: {response[:300]}"
+            )
+            return pid
     except asyncio.TimeoutError as ex:
         logger.error(
             "[TOOL RESPONSE] Timeout waiting for create response from MCP server",
@@ -112,13 +129,16 @@ async def test_tool_read(mcp_server, patient_id):
                 name="read", arguments=request_payload
             )
 
-            response: Dict = await extract_resource(tool_result)
+            response: str = await extract_resource(tool_result)
             assert (
                 response is not None
-                and response.get("resourceType") == "Patient"
-                and response.get("id") == patient_id
-                and response.get("gender") == "male"
-            ), f"Invalid Patient resource in read result: {response}"
+                and "resourceType: Patient" in response
+                and patient_id in response
+                and "gender: male" in response
+                and "Mr. TestGiven" in response
+                and "meta:" not in response
+                and "\ntext:" not in response
+            ), f"Invalid Patient resource in read result: {response[:300]}"
     except asyncio.TimeoutError as ex:
         logger.error(
             "[TOOL RESPONSE] Timeout waiting for read response from MCP server",
@@ -137,12 +157,15 @@ async def test_tool_search(mcp_server, patient_id):
                 name="search", arguments=request_payload
             )
 
-            response: Dict = await extract_resource(tool_result)
+            response: str = await extract_resource(tool_result)
             assert (
-                response is not None
-                and response.get("entry")[0].get("resource").get("resourceType") == "Patient"
-                and response.get("entry")[0].get("resource").get("id") == patient_id
-            ), f"No Patient resource in read result: {response}"
+                "resourceType: Bundle" in response
+                and "entry[" in response
+                and "resourceType: Patient" in response
+                and patient_id in response
+                and "Mr. TestGiven" in response
+                and "meta:" not in response
+            ), f"No Patient resource in search result: {response[:300]}"
     except asyncio.TimeoutError as ex:
         logger.error(
             "[TOOL RESPONSE] Timeout waiting for search response from MCP server",
@@ -158,8 +181,9 @@ async def test_tool_search_condition_count(mcp_server):
         "searchParam": {
             "code": "http://snomed.info/sct|204256004",
             "_summary": "count",
-            "_total": "estimate"
-        }
+            "_total": "estimate",
+        },
+        "fields": ["Bundle.type", "Bundle.total", "Bundle.meta"],
     }
     logger.info("[TEST REQUEST] search Condition count:", request_payload)
     try:
@@ -167,14 +191,10 @@ async def test_tool_search_condition_count(mcp_server):
             tool_result: types.CallToolResult = await mcp_session.call_tool(
                 name="search", arguments=request_payload
             )
-            response: Dict = await extract_resource(tool_result)
-            assert response.get("resourceType") == "Bundle", f"Not a Bundle: {response}"
-            assert response.get("type") == "searchset", f"Not a searchset: {response}"
-            assert "total" in response, f"No total count in response: {response}"
-            assert isinstance(response["total"], int), f"Total is not int: {response}"
-            # Optionally check for SUBSETTED tag
-            tags = response.get("meta", {}).get("tag", [])
-            assert any(tag.get("code") == "SUBSETTED" for tag in tags), f"Missing SUBSETTED tag: {tags}"
+            response: str = await extract_resource(tool_result)
+            assert "searchset" in response, f"Not a searchset: {response[:300]}"
+            assert "total" in response, f"No total count in response: {response[:300]}"
+            assert "SUBSETTED" in response, f"Missing SUBSETTED tag: {response[:300]}"
     except asyncio.TimeoutError as ex:
         logger.error(
             "[TOOL RESPONSE] Timeout waiting for Condition count search response from MCP server",
@@ -191,7 +211,9 @@ async def test_tool_update(mcp_server, patient_id):
         "payload": {
             "resourceType": "Patient",
             "gender": "female",
-            "name": {"family": "TestFamily", "given": ["TestGiven"]},
+            "name": [
+                {"prefix": ["Ms."], "family": "TestFamily", "given": ["TestGiven"]}
+            ],
         },
     }
     logger.debug("[TOOL REQUEST] update:", request_payload)
@@ -201,16 +223,18 @@ async def test_tool_update(mcp_server, patient_id):
                 name="update", arguments=request_payload
             )
 
-            response: Dict = await extract_resource(tool_result)
+            response: str = await extract_resource(tool_result)
             assert (
                 response is not None
-                and response.get("resourceType") == "Patient"
-                and response.get("id") == patient_id
-                and response.get("gender") == "female"
-            ), f"Patient resource is not updated: {response}"
+                and "resourceType: Patient" in response
+                and patient_id in response
+                and "gender: female" in response
+                and "Ms. TestGiven TestFamily" in response
+                and "meta:" not in response
+            ), f"Patient resource is not updated: {response[:300]}"
     except asyncio.TimeoutError as ex:
         logger.error(
-            "[TOOL RESPONSE] Timeout waiting for create response from MCP server",
+            "[TOOL RESPONSE] Timeout waiting for update response from MCP server",
             exc_info=ex,
         )
         raise
@@ -225,27 +249,27 @@ async def test_tool_delete(mcp_server, patient_id):
             tool_result: types.CallToolResult = await mcp_session.call_tool(
                 name="delete", arguments=request_payload
             )
-            response: Dict = await extract_resource(tool_result)
-            assert response is not None, f"Delete operation failed: {delete_response}"
+            response: str = await extract_resource(tool_result)
+            assert response is not None, f"Delete operation failed: {response}"
 
             tool_result: types.CallToolResult = await mcp_session.call_tool(
                 name="read", arguments=request_payload
             )
-            response: Dict = await extract_resource(tool_result)
+            response: str = await extract_resource(tool_result)
             assert (
                 response is not None
-                and response.get("resourceType") == "OperationOutcome"
-                and not response.get("id")
-            ), f"Patient resource is not deleted: {response}"
+                and "resourceType: OperationOutcome" in response
+                and "meta:" not in response
+            ), f"Patient resource is not deleted: {response[:300]}"
     except asyncio.TimeoutError as ex:
         logger.error(
-            "[TOOL RESPONSE] Timeout waiting for create response from MCP server",
+            "[TOOL RESPONSE] Timeout waiting for delete response from MCP server",
             exc_info=ex,
         )
         raise
 
 
-async def extract_resource(tool_result: types.CallToolResult) -> Dict:
+async def extract_resource(tool_result: types.CallToolResult) -> str:
     logger.debug(f"[TOOL RESULT] : {tool_result!r}")
     assert tool_result is not None
     assert not tool_result.isError
@@ -257,5 +281,6 @@ async def extract_resource(tool_result: types.CallToolResult) -> Dict:
             text = content.text
             break
     assert text, "No text content in tool_result"
-
-    return json.loads(text)
+    with pytest.raises(json.JSONDecodeError):
+        json.loads(text)
+    return text

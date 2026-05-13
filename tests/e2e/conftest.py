@@ -86,7 +86,7 @@ async def mcp_server() -> AsyncGenerator[bool, Any]:
                 logger.debug(f"{line.rstrip()}")
         process.terminate()
         process.wait()
-        raise RuntimeError(f"MCP server failed to start or port 8001 not open.")
+        raise RuntimeError("MCP server failed to start or port 8001 not open.")
     logger.info("MCP server is ready on port 8001.")
     yield True
     logger.info("Terminating MCP server.")
