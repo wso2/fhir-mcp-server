@@ -13,8 +13,8 @@ classifiers = [
 ]
 dependencies = [
   "mcp[cli]==1.27.0",
-  "aiohttp==3.12.13",
-  "fhirpy==2.0.15",
+  "aiohttp==3.13.5",
+  "fhirpy==2.2.0",
 ]
 description = "A Model Context Protocol (MCP) server that provides seamless, standardized access to Fast Healthcare Interoperability Resources (FHIR) data from any compatible FHIR server. Designed for easy integration with AI tools, developer workflows, and healthcare applications, it enables natural language and programmatic search, retrieval, and analysis of clinical data."
 keywords = [
@@ -49,14 +49,14 @@ url = "https://pypi.org/simple/"
 
 [project.optional-dependencies]
 dev = [
-  "pytest==8.4.0",
-  "pytest-asyncio==1.0.0",
-  "pytest-cov==6.2.0",
+  "pytest==9.0.3",
+  "pytest-asyncio==1.3.0",
+  "pytest-cov==7.1.0",
 ]
 test = [
-  "pytest==8.4.0",
-  "pytest-asyncio==1.0.0",
-  "pytest-cov==6.2.0",
+  "pytest==9.0.3",
+  "pytest-asyncio==1.3.0",
+  "pytest-cov==7.1.0",
 ]
 
 [project.urls]
