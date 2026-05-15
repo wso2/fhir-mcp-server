@@ -12,7 +12,7 @@ classifiers = [
   "Operating System :: OS Independent",
 ]
 dependencies = [
-  "mcp[cli]==1.27.0",
+  "mcp[cli]==1.27.1",
   "aiohttp==3.13.5",
   "fhirpy==2.2.0",
 ]
