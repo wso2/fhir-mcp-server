@@ -17,14 +17,27 @@
 from typing import Optional
 
 from .identifier import Identifier
-from .base import FhirBaseModel
+from .base import FhirTypesBaseModel
 
 
-class Reference(FhirBaseModel):
+class Reference(FhirTypesBaseModel):
     reference: Optional[str] = None
     type: Optional[str] = None
     identifier: Optional[Identifier] = None
     display: Optional[str] = None
+
+    def compact(self) -> str:
+        # {"display": "Dr. Jane Doe"}                                                              -> "Dr. Jane Doe"
+        # {"reference": "Patient/123"}                                                             -> "Patient/123"
+        # {"type": "Patient", "identifier": {"system": "http://hospital.org/mrn", "value": "X"}} -> "Patient: http://hospital.org/mrn|X"
+        if self.display:
+            return self.display
+        if self.reference:
+            return self.reference
+        if self.identifier:
+            id_str = self.identifier.compact()
+            return f"{self.type}: {id_str}" if self.type else id_str
+        return self.type or ""
 
 
 # resolve circular ref with Identifier

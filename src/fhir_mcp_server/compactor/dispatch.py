@@ -22,7 +22,7 @@ The resulting typed object is used by the compactor to produce a short,
 human-readable string.
 """
 
-from fhir_mcp_server.compactor.registry import COMPACTORS
+from fhir_mcp_server.compactor.registry import COMPLEX_DATA_TYPES
 from pydantic import ValidationError
 from typing import Any
 
@@ -44,9 +44,9 @@ def compact_resource(data: Any) -> Any:
     if not isinstance(data, dict):  # primitive (string, number, bool) — nothing to compact
         return data
 
-    for fhir_type, compactor in COMPACTORS.items():
+    for data_type in COMPLEX_DATA_TYPES:
         try:
-            result = compactor(fhir_type.model_validate(data))
+            result = data_type.model_validate(data).compact()
             return result if result else data
         except ValidationError:
             continue

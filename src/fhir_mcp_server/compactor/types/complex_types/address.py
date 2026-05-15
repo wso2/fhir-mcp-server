@@ -14,13 +14,16 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from .period import Period
-from .base import FhirBaseModel
-
+import logging
 from typing import List, Optional
 
+from .period import Period
+from .base import FhirTypesBaseModel
 
-class Address(FhirBaseModel):
+logger = logging.getLogger(__name__)
+
+
+class Address(FhirTypesBaseModel):
     text: Optional[str] = None
     use: Optional[str] = None
     type: Optional[str] = None
@@ -31,3 +34,30 @@ class Address(FhirBaseModel):
     postalCode: Optional[str] = None
     country: Optional[str] = None
     period: Optional[Period] = None
+
+    def compact(self) -> str:
+        """Compact an Address to a single line; appends use and type when present."""
+        # {"line": ["123 Main St"], "city": "Boston", "district": "Suffolk", "state": "MA", "postalCode": "02101", "country": "US"} -> "123 Main St, Boston Suffolk MA 02101, US"
+        # {"text": "123 Main St, Boston MA 02101"}                                                                                  -> "123 Main St, Boston MA 02101"
+        # {"use": "home", "type": "postal", "line": ["123 Main St"], "city": "Boston"}                                              -> "123 Main St, Boston (home, postal)"
+        logger.debug(f"Compacting address: {self.model_dump_json()}")
+        if self.text:
+            logger.debug(f"Address has 'text' field, returning: '{self.text}'")
+            return self.text
+        parts: List[str] = []
+        if self.line:
+            parts.append(", ".join(self.line))
+        location = " ".join(
+            filter(
+                None, [self.city or "", self.district or "", self.state or "", self.postalCode or ""]
+            )
+        )
+        if location:
+            parts.append(location)
+        if self.country:
+            parts.append(self.country)
+        result = ", ".join(parts)
+        qualifiers = ", ".join(filter(None, [self.use or "", self.type or ""]))
+        compacted = f"{result} ({qualifiers})" if qualifiers else result
+        logger.debug(f"Compacted address: '{compacted}'")
+        return compacted

@@ -14,15 +14,48 @@
 # specific language governing permissions and limitations
 # under the License.
 
+import logging
 from datetime import date, datetime
-from typing import Optional, Union
+from typing import Optional, Union, List
+
+# from fhir_mcp_server.compactor.compactors import annotation
 
 from .reference import Reference
-from .base import FhirBaseModel
+from .base import FhirTypesBaseModel
 
 
-class Annotation(FhirBaseModel):
+logger = logging.getLogger(__name__)
+
+
+class Annotation(FhirTypesBaseModel):
     text: Optional[str] = None
     authorString: Optional[str] = None
     authorReference: Optional[Reference] = None
     time: Optional[Union[str, date, datetime]] = None
+
+
+    def compact(self) -> str:
+        """Compact an Annotation to "text (author, time)"; author/time included per spec warning on modifying information."""
+        # {"text": "Patient was fasting", "time": "2024-01-01T09:00:00Z"}                          -> "Patient was fasting (2024-01-01T09:00:00Z)"
+        # {"text": "Patient was fasting", "authorString": "Dr. Smith", "time": "2024-01-01"}       -> "Patient was fasting (Dr. Smith, 2024-01-01)"
+        logger.debug(f"Compacting annotation: {self.model_dump_json()}")
+        meta: List[str] = []
+        if self.authorString:
+            meta.append(self.authorString)
+        elif self.authorReference and self.authorReference.reference:
+            logger.debug(
+                f"No authorString, falling back to authorReference: '{self.authorReference.reference}'"
+            )
+            meta.append(self.authorReference.reference)
+        if self.time:
+            t = (
+                self.time.isoformat()
+                if hasattr(self.time, "isoformat")
+                else str(self.time)
+            )
+            meta.append(t.replace("+00:00", "Z"))
+        text = self.text or ""
+        compacted = f"{text} ({', '.join(meta)})" if meta else text
+        logger.debug(f"Compacted annotation: '{compacted}'")
+        return compacted
+    

@@ -16,13 +16,13 @@
 
 from typing import List, Optional, Union
 
+from pydantic import BaseModel
 from .period import Period
 from . import Quantity
 from . import Range
-from .base import FhirBaseModel
 
 
-class TimingRepeat(FhirBaseModel):
+class TimingRepeat(BaseModel):
     boundsDuration: Optional[Quantity] = None
     boundsRange: Optional[Range] = None
     boundsPeriod: Optional[Period] = None

@@ -14,12 +14,31 @@
 # specific language governing permissions and limitations
 # under the License.
 
+import logging
 from typing import Optional, Union
 from datetime import date, datetime
 
-from .base import FhirBaseModel
+from .base import FhirTypesBaseModel
+
+logger = logging.getLogger(__name__)
 
 
-class Period(FhirBaseModel):
+class Period(FhirTypesBaseModel):
     start: Optional[Union[str, date, datetime]] = None
     end: Optional[Union[str, date, datetime]] = None
+
+
+    def compact(self) -> str:
+        """Compact a Period to "start – end", "from start", or "until end"."""
+        # {"start": "2024-01-01", "end": "2024-06-30"} -> "2024-01-01 – 2024-06-30"
+        # {"start": "2024-01-01"}                       -> "from 2024-01-01"
+        # {"end": "2024-06-30"}                         -> "until 2024-06-30"
+        logger.debug(f"Compacting Period: {self.model_dump_json()}")
+        start = str(self.start) if self.start else ""
+        end = str(self.end) if self.end else ""
+        if start and end:
+            compacted = f"{start} – {end}"
+        else:
+            compacted = f"from {start}" if start else f"until {end}" if end else ""
+        logger.debug(f"Compacted Period: '{compacted}'")
+        return compacted

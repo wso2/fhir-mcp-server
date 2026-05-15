@@ -33,7 +33,7 @@ def compact(identifier: Identifier) -> str:
     if identifier.use:
         result = f"{result} [{identifier.use}]"
     if identifier.type:
-        type_label = codeable_concept.compact(identifier.type)
+        type_label = identifier.type.compact()
         if type_label:
             result = f"{type_label}: {result}"
     logger.debug(f"Compacted Identifier: '{result}'")

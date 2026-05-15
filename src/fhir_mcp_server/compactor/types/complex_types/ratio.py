@@ -14,12 +14,29 @@
 # specific language governing permissions and limitations
 # under the License.
 
+import logging
 from typing import Optional
 
-from .base import FhirBaseModel
+from .base import FhirTypesBaseModel
 from .quantity import Quantity
 
 
-class Ratio(FhirBaseModel):
+logger = logging.getLogger(__name__)
+
+
+class Ratio(FhirTypesBaseModel):
     numerator: Optional[Quantity] = None
     denominator: Optional[Quantity] = None
+
+    def compact(self) -> str:
+        """Compact a Ratio to "numerator/denominator"; returns empty string if either side is absent."""
+        # {"numerator": {"value": 1, "unit": "mg"}, "denominator": {"value": 10, "unit": "mL"}} -> "1 mg/10 mL"
+        logger.debug(f"Compacting Ratio: {self.model_dump_json()}")
+        if not self.numerator or not self.denominator:
+            logger.debug("Ratio missing numerator or denominator")
+            return ""
+        compacted = (
+            f"{self.numerator.compact()}/{self.denominator.compact()}"
+        )
+        logger.debug(f"Compacted Ratio: '{compacted}'")
+        return compacted

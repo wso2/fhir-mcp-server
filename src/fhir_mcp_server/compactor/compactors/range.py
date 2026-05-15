@@ -17,7 +17,6 @@
 import logging
 
 from ..types.complex_types import Range
-from . import quantity
 
 logger = logging.getLogger(__name__)
 
@@ -26,8 +25,8 @@ def compact(range: Range) -> str:
     """Compact a Range to "low – high", or just low/high if one bound is absent."""
     # {"low": {"value": 3.5, "unit": "mmol/L"}, "high": {"value": 5.5, "unit": "mmol/L"}} -> "3.5 mmol/L – 5.5 mmol/L"
     logger.debug(f"Compacting Range: {range}")
-    low_s = quantity.compact(range.low) if range.low else ""
-    high_s = quantity.compact(range.high) if range.high else ""
+    low_s = range.low.compact() if range.low else ""
+    high_s = range.high.compact() if range.high else ""
     compacted = f"{low_s} – {high_s}" if low_s and high_s else low_s or high_s
     logger.debug(f"Compacted Range: '{compacted}'")
     return compacted

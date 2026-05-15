@@ -75,7 +75,7 @@ def compact(timing: Timing) -> str:
     # {"repeat": {"duration": 5, "durationUnit": "min", "when": ["AC"], "offset": 10}}                  -> "for 5min, 10min before meal"
     logger.debug(f"Compacting Timing: {timing}")
     if timing.code:
-        code_str = codeable_concept.compact(timing.code)
+        code_str = timing.code.compact()
         if code_str:
             logger.debug(f"Compacted Timing using code: '{code_str}'")
             return code_str
@@ -150,9 +150,9 @@ def compact(timing: Timing) -> str:
             )
             parts.append(f"for {bd_s}")
         elif r.boundsRange is not None:
-            parts.append(f"for {range.compact(r.boundsRange)}")
+            parts.append(f"for {r.boundsRange.compact()}")
         elif r.boundsPeriod is not None:
-            bounds_p = period.compact(r.boundsPeriod)
+            bounds_p = r.boundsPeriod.compact()
             if bounds_p:
                 parts.append(bounds_p)
 

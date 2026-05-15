@@ -14,11 +14,15 @@
 # specific language governing permissions and limitations
 # under the License.
 
+from abc import ABC, abstractmethod
 from pydantic import BaseModel, ConfigDict
 from typing import List, Optional
 
 
-class FhirBaseModel(BaseModel):
+class FhirTypesBaseModel(BaseModel, ABC):
     model_config = ConfigDict(extra="forbid")
     id: Optional[str] = None
     extension: Optional[List[dict]] = None
+
+    @abstractmethod
+    def compact(self) -> str: ...

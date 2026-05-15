@@ -345,10 +345,10 @@ class TestCompactIdentifier:
     def test_value_only(self):
         assert compact_resource({"value": "MRN123"}) == "MRN123"
 
-    def test_system_only(self):
+    def test_system_only_returns_entire_json(self):
         assert (
             compact_resource({"system": "http://hospital.org/mrn"})
-            == "http://hospital.org/mrn"
+            == {"system": "http://hospital.org/mrn"}
         )
 
 

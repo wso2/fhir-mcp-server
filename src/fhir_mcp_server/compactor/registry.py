@@ -14,43 +14,55 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from .compactors import (
-    address,
-    annotation,
-    attachment,
-    codeable_concept,
-    coding,
-    contact_point,
-    extension,
-    human_name,
-    identifier,
-    money,
-    period,
-    quantity,
-    range as range_,
-    ratio,
-    timing,
-)
+from typing import List, Type
+
+# from .compactors import (
+#     address,
+#     annotation,
+#     attachment,
+#     codeable_concept,
+#     coding,
+#     contact_point,
+#     extension,
+#     human_name,
+#     identifier,
+#     money,
+#     period,
+#     quantity,
+#     range as range_,
+#     ratio,
+#     timing,
+# )
+from fhir_mcp_server.compactor.types.complex_types.base import FhirTypesBaseModel
+
 from .types.complex_types import (
     Address, Annotation, Attachment, CodeableConcept, Coding,
     ContactPoint, Extension, HumanName, Identifier, Money,
     Period, Quantity, Range, Ratio, Timing,
 )
 
-COMPACTORS = {
-    Ratio: ratio.compact,
-    Range: range_.compact,
-    Money: money.compact,
-    Annotation: annotation.compact,
-    Period: period.compact,
-    HumanName: human_name.compact,
-    Address: address.compact,
-    Coding: coding.compact,
-    CodeableConcept: codeable_concept.compact,
-    Quantity: quantity.compact,
-    Extension: extension.compact,
-    Attachment: attachment.compact,
-    ContactPoint: contact_point.compact,
-    Identifier: identifier.compact,
-    Timing: timing.compact,
-}
+# COMPACTORS = {
+#     Ratio: ratio.compact,
+#     Range: range_.compact,
+#     Money: money.compact,
+#     Annotation: annotation.compact,
+#     Period: period.compact,
+#     HumanName: human_name.compact,
+#     Address: address.compact,
+#     Coding: coding.compact,
+#     CodeableConcept: codeable_concept.compact,
+#     Quantity: quantity.compact,
+#     Extension: extension.compact,
+#     Attachment: attachment.compact,
+#     ContactPoint: contact_point.compact,
+#     Identifier: identifier.compact,
+#     Timing: timing.compact,
+# }
+
+
+# Use Type[] to indicate you are storing the classes themselves
+COMPLEX_DATA_TYPES: List[Type[FhirTypesBaseModel]] = [
+    Ratio, Range, Money, Annotation, Period, HumanName, 
+    Address, Coding, CodeableConcept, Quantity, 
+    Extension, Attachment, ContactPoint, Identifier, Timing
+]

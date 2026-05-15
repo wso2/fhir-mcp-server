@@ -14,11 +14,25 @@
 # specific language governing permissions and limitations
 # under the License.
 
+import logging
 from typing import Optional, Union
 
-from .base import FhirBaseModel
+from .base import FhirTypesBaseModel
 
 
-class Money(FhirBaseModel):
+logger = logging.getLogger(__name__)
+
+
+class Money(FhirTypesBaseModel):
     value: Optional[Union[int, float]] = None
     currency: Optional[str] = None
+
+    def compact(self) -> str:
+        """Compact a Money value to "amount currency"."""
+        # {"value": 49.99, "currency": "USD"} -> "49.99 USD"
+        logger.debug(f"Compacting Money: {self.model_dump_json()}")
+        value = f"{float(self.value):g}" if self.value is not None else ""
+        currency = self.currency or ""
+        compacted = f"{value} {currency}".strip()
+        logger.debug(f"Compacted Money: '{compacted}'")
+        return compacted

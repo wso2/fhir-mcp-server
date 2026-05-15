@@ -14,13 +14,16 @@
 # specific language governing permissions and limitations
 # under the License.
 
+import logging
 from typing import Literal, Optional
 
 from .period import Period
-from .base import FhirBaseModel
+from .base import FhirTypesBaseModel
+
+logger = logging.getLogger(__name__)
 
 
-class ContactPoint(FhirBaseModel):
+class ContactPoint(FhirTypesBaseModel):
     system: Optional[
         Literal["phone", "fax", "email", "pager", "url", "sms", "other"]
     ] = None
@@ -28,3 +31,19 @@ class ContactPoint(FhirBaseModel):
     use: Optional[str] = None
     rank: Optional[int] = None
     period: Optional[Period] = None
+
+    def compact(self) -> str:
+        """Compact a ContactPoint to "system: value (use) #rank"."""
+        # {"system": "phone", "value": "555-1234", "use": "home"}          -> "phone: 555-1234 (home)"
+        # {"system": "email", "value": "john@example.com"}                  -> "email: john@example.com"
+        # {"system": "phone", "value": "555-1234", "use": "home", "rank": 1} -> "phone: 555-1234 (home) #1"
+        logger.debug(f"Compacting ContactPoint: {self.model_dump_json()}")
+        system = self.system or ""
+        value = self.value or ""
+        result = f"{system}: {value}" if system else value
+        if self.use:
+            result = f"{result} ({self.use})"
+        if self.rank is not None:
+            result = f"{result} #{self.rank}"
+        logger.debug(f"Compacted ContactPoint: '{result}'")
+        return result

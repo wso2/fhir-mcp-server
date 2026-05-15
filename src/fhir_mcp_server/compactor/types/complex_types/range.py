@@ -14,12 +14,26 @@
 # specific language governing permissions and limitations
 # under the License.
 
+import logging
 from typing import Optional
 
-from .base import FhirBaseModel
+from .base import FhirTypesBaseModel
 from .quantity import Quantity
 
 
-class Range(FhirBaseModel):
+logger = logging.getLogger(__name__)
+
+
+class Range(FhirTypesBaseModel):
     low: Optional[Quantity] = None
     high: Optional[Quantity] = None
+
+    def compact(self) -> str:
+        """Compact a Range to "low – high", or just low/high if one bound is absent."""
+        # {"low": {"value": 3.5, "unit": "mmol/L"}, "high": {"value": 5.5, "unit": "mmol/L"}} -> "3.5 mmol/L – 5.5 mmol/L"
+        logger.debug(f"Compacting Range: {self.model_dump_json()}")
+        low_s = self.low.compact() if self.low else ""
+        high_s = self.high.compact() if self.high else ""
+        compacted = f"{low_s} – {high_s}" if low_s and high_s else low_s or high_s
+        logger.debug(f"Compacted Range: '{compacted}'")
+        return compacted

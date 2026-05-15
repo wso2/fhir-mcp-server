@@ -14,14 +14,37 @@
 # specific language governing permissions and limitations
 # under the License.
 
+import logging
 from typing import Optional
 
-from .base import FhirBaseModel
+# from fhir_mcp_server.compactor.compactors import coding
+
+from .base import FhirTypesBaseModel
+
+logger = logging.getLogger(__name__)
 
 
-class Coding(FhirBaseModel):
+class Coding(FhirTypesBaseModel):
     system: Optional[str] = None
     version: Optional[str] = None
     code: Optional[str] = None
     display: Optional[str] = None
     userSelected: Optional[bool] = None
+
+    def compact(self) -> str:
+        """Compact a Coding: prefers display+code, then system|code, then code alone."""
+        # {"system": "http://loinc.org", "code": "8302-2", "display": "Body Height"} -> "Body Height (8302-2)"
+        # {"system": "http://loinc.org", "code": "8302-2"}                            -> "http://loinc.org|8302-2"
+        # {"system": "http://loinc.org", "display": "Body Height"}                     -> "Body Height"
+        logger.debug(f"Compacting Coding: {self.model_dump_json()}")
+        if self.display:
+            compacted = f"{self.display} ({self.code})" if self.code else self.display
+            logger.debug(f"Compacted Coding using display: '{compacted}'")
+            return compacted
+        if self.system and self.code:
+            compacted = f"{self.system}|{self.code}"
+            logger.debug(f"No display, falling back to system|code: '{compacted}'")
+            return compacted
+        compacted = self.code or ""
+        logger.debug(f"No display or system+code, falling back to: '{compacted}'")
+        return compacted

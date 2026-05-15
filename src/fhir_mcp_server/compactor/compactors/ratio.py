@@ -29,6 +29,6 @@ def compact(ratio: Ratio) -> str:
     if not ratio.numerator or not ratio.denominator:
         logger.debug("Ratio missing numerator or denominator")
         return ""
-    compacted = f"{quantity.compact(ratio.numerator)}/{quantity.compact(ratio.denominator)}"
+    compacted = f"{ratio.numerator.compact()}/{ratio.denominator.compact()}"
     logger.debug(f"Compacted Ratio: '{compacted}'")
     return compacted
