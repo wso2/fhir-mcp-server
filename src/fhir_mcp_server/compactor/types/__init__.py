@@ -13,3 +13,39 @@
 # KIND, either express or implied. See the License for the
 # specific language governing permissions and limitations
 # under the License.
+
+from .address import Address
+from .annotation import Annotation
+from .attachment import Attachment
+from .codeable_concept import CodeableConcept
+from .coding import Coding
+from .contact_point import ContactPoint
+from .extension import Extension
+from .human_name import HumanName
+from .identifier import Identifier
+from .money import Money
+from .period import Period
+from .quantity import Quantity
+from .range import Range
+from .ratio import Ratio
+from .reference import Reference
+from .timing import Timing
+
+__all__ = [
+    "Address",
+    "Annotation",
+    "Attachment",
+    "CodeableConcept",
+    "Coding",
+    "ContactPoint",
+    "Extension",
+    "HumanName",
+    "Identifier",
+    "Money",
+    "Period",
+    "Quantity",
+    "Range",
+    "Ratio",
+    "Reference",
+    "Timing",
+]

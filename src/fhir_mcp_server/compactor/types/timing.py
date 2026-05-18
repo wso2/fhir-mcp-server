@@ -21,7 +21,6 @@ from typing import Dict, List, Optional, Union
 
 from .codeable_concept import CodeableConcept
 from .timing_repeat import TimingRepeat
-from .period import Period
 from .base import FhirTypesBaseModel
 
 

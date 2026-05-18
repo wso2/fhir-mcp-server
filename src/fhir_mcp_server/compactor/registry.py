@@ -16,9 +16,9 @@
 
 from typing import List, Type
 
-from .types.complex_types.base import FhirTypesBaseModel
+from .types.base import FhirTypesBaseModel
 
-from .types.complex_types import (
+from .types import (
     Address,
     Annotation,
     Attachment,
