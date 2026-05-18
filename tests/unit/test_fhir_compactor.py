@@ -632,11 +632,10 @@ class TestCompactExtension:
         assert compact_resource(data) == data
 
     def test_extract_extension_value_list(self):
-        from fhir_mcp_server.compactor.compactors.extension import _extract_extension_value
         from fhir_mcp_server.compactor.types.complex_types.extension import Extension
 
         ext = Extension.model_validate({"url": "x", "valueList": [1, 2]})
-        assert _extract_extension_value(ext) == ""
+        assert ext._extract_extension_value() == ""
 
     def test_compact_extension_nested_not_dict(self):
         v = {"url": "x", "extension": ["string"]}

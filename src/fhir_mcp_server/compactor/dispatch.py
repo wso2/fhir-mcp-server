@@ -39,9 +39,11 @@ def compact_resource(data: Any) -> Any:
     - Signature: digital signature bytes, not human-readable.
     """
 
-    if isinstance(data, list):  # FHIRPath returns lists — compact each matched value
+    # FHIRPath returns lists — compact each matched value
+    if isinstance(data, list):
         return [compact_resource(item) for item in data]
-    if not isinstance(data, dict):  # primitive (string, number, bool) — nothing to compact
+    # primitive (string, number, bool) — nothing to compact
+    if not isinstance(data, dict):
         return data
 
     for data_type in COMPLEX_DATA_TYPES:
