@@ -27,9 +27,12 @@ class Reference(FhirTypesBaseModel):
     display: Optional[str] = None
 
     def compact(self) -> str:
+        # {"display": "Amy Shaw", "reference": "Patient/123"}                                     -> "Amy Shaw [Patient/123]"
         # {"display": "Dr. Jane Doe"}                                                              -> "Dr. Jane Doe"
         # {"reference": "Patient/123"}                                                             -> "Patient/123"
         # {"type": "Patient", "identifier": {"system": "http://hospital.org/mrn", "value": "X"}} -> "Patient: http://hospital.org/mrn|X"
+        if self.display and self.reference:
+            return f"{self.display} [{self.reference}]"
         if self.display:
             return self.display
         if self.reference:

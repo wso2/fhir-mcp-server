@@ -14,27 +14,8 @@
 # specific language governing permissions and limitations
 # under the License.
 
-import pytest
 from datetime import date, datetime
 from fhir_mcp_server.compactor.dispatch import compact_resource
-from fhir_mcp_server.compactor.types import (
-    Address,
-    Annotation,
-    Attachment,
-    CodeableConcept,
-    Coding,
-    ContactPoint,
-    Extension,
-    HumanName,
-    Identifier,
-    Money,
-    Period,
-    Quantity,
-    Range,
-    Ratio,
-    Reference,
-    Timing,
-)
 
 
 class TestCompactCodeableConcept:
@@ -217,31 +198,36 @@ class TestCompactRange:
         v = {"high": {"value": 5.5, "unit": "mmol/L"}}
         assert compact_resource(v) == "5.5 mmol/L"
 
-    def test_equal_bounds_allowed(self):
-        """Test that equal low and high bounds are accepted."""
-        r = Range.model_validate({"low": {"value": 5.0}, "high": {"value": 5.0}})
-        assert r.low.value == r.high.value
+    def test_equal_bounds_compact(self):
+        """Test that equal low and high bounds compact to an en-dash range."""
+        assert compact_resource({"low": {"value": 5.0}, "high": {"value": 5.0}}) == "5 – 5"
 
 
-class TestPeriodValidation:
-    """Test Period model validation with various date/datetime inputs."""
+class TestCompactPeriodInputTypes:
+    """Test compact_resource with Period using Python date/datetime inputs."""
 
-    def test_date_objects_accepted(self):
-        """Test that Python date objects are accepted as period boundaries."""
-        p = Period.model_validate({"start": date(2024, 1, 1), "end": date(2024, 6, 1)})
-        assert p.start == date(2024, 1, 1)
-
-    def test_equal_start_end_allowed(self):
-        """Test that equal start and end dates are accepted."""
-        p = Period.model_validate({"start": "2024-01-01", "end": "2024-01-01"})
-        assert p.start == p.end
-
-    def test_period_datetime_validation(self):
-        """Test that Python datetime objects are accepted as period boundaries."""
-        p = Period.model_validate(
-            {"start": datetime(2024, 1, 1, 10), "end": datetime(2024, 1, 1, 12)}
+    def test_date_objects_compact(self):
+        """Test that Python date objects compact to ISO date strings."""
+        assert (
+            compact_resource({"start": date(2024, 1, 1), "end": date(2024, 6, 1)})
+            == "2024-01-01 – 2024-06-01"
         )
-        assert p.start == datetime(2024, 1, 1, 10)
+
+    def test_equal_start_end_compact(self):
+        """Test that equal start and end dates compact to a range."""
+        assert (
+            compact_resource({"start": "2024-01-01", "end": "2024-01-01"})
+            == "2024-01-01 – 2024-01-01"
+        )
+
+    def test_datetime_objects_compact(self):
+        """Test that Python datetime objects compact to ISO datetime strings."""
+        assert (
+            compact_resource(
+                {"start": datetime(2024, 1, 1, 10), "end": datetime(2024, 1, 1, 12)}
+            )
+            == "2024-01-01 10:00:00 – 2024-01-01 12:00:00"
+        )
 
 
 class TestCompactRatio:
@@ -485,26 +471,20 @@ class TestCompactAttachment:
             == f"data:image/png;base64,{base64.b64encode(raw).decode()}"
         )
 
-    def test_hash_bytes_passthrough(self):
-        """Test that raw bytes are accepted and stored as-is for hash."""
-        raw_hash = b"\xde\xad\xbe\xef"
-        a = Attachment.model_validate(
-            {"contentType": "application/pdf", "hash": raw_hash}
-        )
-        assert a.hash == raw_hash
+    def test_raw_bytes_data_compacts_to_data_uri(self):
+        """Test that raw bytes data compacts to a base64 data URI."""
+        import base64
 
-    def test_data_bytes_passthrough(self):
-        """Test that raw bytes are accepted and stored as-is for data."""
         raw = b"raw bytes"
-        a = Attachment.model_validate({"contentType": "application/pdf", "data": raw})
-        assert a.data == raw
+        assert (
+            compact_resource({"contentType": "application/pdf", "data": raw})
+            == f"data:application/pdf;base64,{base64.b64encode(raw).decode()}"
+        )
 
-    def test_attachment_hash_data_non_string(self):
-        """Test that dict values for hash and data are rejected."""
-        with pytest.raises(Exception):
-            Attachment.model_validate(
-                {"contentType": "text/plain", "hash": {"dict": 1}, "data": {"dict": 2}}
-            )
+    def test_dict_hash_and_data_falls_through_to_raw(self):
+        """Test that dict values for hash and data are not valid Attachment fields and fall through."""
+        v = {"contentType": "text/plain", "hash": {"dict": 1}, "data": {"dict": 2}}
+        assert compact_resource(v) == v
 
 
 class TestCompactAnnotation:
@@ -753,10 +733,10 @@ class TestCompactExtension:
         data = {"url": "http://example.org/ext", "valueString": "a", "valueInteger": 1}
         assert compact_resource(data) == data
 
-    def test_extract_extension_value_list(self):
-        """Test that a list-typed value field returns an empty string."""
-        ext = Extension.model_validate({"url": "x", "valueList": [1, 2]})
-        assert ext._extract_extension_value() == ""
+    def test_list_value_field_returns_raw(self):
+        """Test that a list-typed value field cannot be reduced and returns the raw dict."""
+        data = {"url": "x", "valueList": [1, 2]}
+        assert compact_resource(data) == data
 
     def test_compact_extension_nested_not_dict(self):
         """Test that non-dict items in extension list return the raw value."""
@@ -944,6 +924,33 @@ class TestCompactTiming:
         """Test that an empty Timing dict returns the raw dict."""
         v = {}
         assert compact_resource(v) == v
+
+
+class TestCompactReference:
+    """Test compact_resource with Reference payloads."""
+
+    def test_display_and_reference(self):
+        """Test that display and reference are combined when both are present."""
+        v = {"reference": "Patient/123", "display": "Amy Shaw"}
+        assert compact_resource(v) == "Amy Shaw [Patient/123]"
+
+    def test_display_only(self):
+        """Test that display alone is returned when reference is absent."""
+        v = {"display": "GP Visit"}
+        assert compact_resource(v) == "GP Visit"
+
+    def test_reference_only(self):
+        """Test that reference alone is returned when display is absent."""
+        v = {"reference": "Patient/123"}
+        assert compact_resource(v) == "Patient/123"
+
+    def test_identifier_with_type(self):
+        """Test that identifier and type are combined when reference and display are absent."""
+        v = {
+            "type": "Patient",
+            "identifier": {"system": "http://hospital.org/mrn", "value": "X"},
+        }
+        assert compact_resource(v) == "Patient: http://hospital.org/mrn|X"
 
 
 class TestRealWorldPayloads:

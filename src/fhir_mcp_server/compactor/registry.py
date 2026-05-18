@@ -33,6 +33,7 @@ from .types import (
     Quantity,
     Range,
     Ratio,
+    Reference,
     Timing,
 )
 
@@ -51,5 +52,6 @@ COMPLEX_DATA_TYPES: List[Type[FhirTypesBaseModel]] = [
     Attachment,
     ContactPoint,
     Identifier,
+    Reference,
     Timing,
 ]
