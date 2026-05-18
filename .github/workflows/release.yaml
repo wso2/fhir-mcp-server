@@ -166,9 +166,16 @@ jobs:
           path: dist/
           retention-days: 30
 
+  trivy-scan:
+    name: Trivy scan
+    needs: [details, check_pypi]
+    uses: ./.github/workflows/trivy-scan.yml
+    permissions:
+      contents: read
+
   pypi_publish:
     name: Upload release to PyPI
-    needs: [setup_and_build, details]
+    needs: [setup_and_build, details, trivy-scan]
     runs-on: ubuntu-latest
     permissions:
       id-token: write  # Required for OIDC
@@ -217,7 +224,7 @@ jobs:
 
   github_release:
     name: Create GitHub Release
-    needs: [setup_and_build, details]
+    needs: [setup_and_build, details, trivy-scan]
     runs-on: ubuntu-latest
     permissions:
       contents: write  # Required for creating releases
