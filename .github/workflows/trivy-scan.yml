@@ -10,8 +10,8 @@ permissions:
   contents: read
 
 jobs:
-  trivy-fs:
-    name: Filesystem scan
+  trivy_scan:
+    name: Trivy Scan
     runs-on: ubuntu-latest
     steps:
       - name: Harden Runner
@@ -22,7 +22,7 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Run Trivy filesystem scan
+      - name: Run Trivy Vulnerability Scan
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
