@@ -80,7 +80,7 @@ You can use the FHIR MCP Server by installing our Python package, or by cloning 
     To run the server, you must set `FHIR_SERVER_BASE_URL`.
 
     * **To enable authorization:** Set `FHIR_SERVER_BASE_URL`, `FHIR_SERVER_CLIENT_ID`, `FHIR_SERVER_CLIENT_SECRET`, and `FHIR_SERVER_SCOPES`. Authorization is enabled by default.
-    * **To disable authorization:** Set `FHIR_SERVER_DISABLE_AUTHORIZATION` to `True`.
+    * **To disable authorization (local use only):** Set `FHIR_SERVER_DISABLE_AUTHORIZATION` to `True`. This is intended only for local runs — use the `stdio` transport, or bind `FHIR_MCP_HOST` to a loopback address (`localhost`/`127.0.0.1`). On a network transport (`streamable-http`/`sse`) it cannot be combined with `FHIR_SERVER_ACCESS_TOKEN`; the server will refuse to start.
 
     By default, the MCP server runs on **[http://localhost:8000](http://localhost:8000)**, and you can customize the host and port using `FHIR_MCP_HOST` and `FHIR_MCP_PORT`.
 
@@ -141,7 +141,7 @@ You can use the FHIR MCP Server by installing our Python package, or by cloning 
 
 You can run the MCP server using Docker for a consistent, isolated environment. 
 
->Note on **Authorization**: When running the MCP server **locally** via Docker or Docker Compose, authorization should be disabled by setting the environment variable, `FHIR_SERVER_DISABLE_AUTHORIZATION=True` . This would be fixed in the future releases.
+>Note on **Authorization**: `FHIR_SERVER_DISABLE_AUTHORIZATION=True` is intended for **local** Docker or Docker Compose runs only. When authorization is disabled, do not set `FHIR_SERVER_ACCESS_TOKEN` on a network transport (`streamable-http`/`sse`) — the server will refuse to start in that configuration. For any network-reachable or production deployment, leave authorization enabled.
 
 1. Build the Docker Image or pull the docker image from the container registry:
 
@@ -409,11 +409,11 @@ uv run fhir-mcp-server --help
 These variables configure the MCP client's secure connection to the MCP server, using the OAuth2 authorization code grant flow with a FHIR server.
 
 - `FHIR_SERVER_CLIENT_ID`: The OAuth2 client ID used to authorize MCP clients with the FHIR server.
-- `FHIR_SERVER_DISABLE_AUTHORIZATION`: If set to `True`, disables authorization checks on the MCP server, allowing connections to publicly accessible FHIR servers.
+- `FHIR_SERVER_DISABLE_AUTHORIZATION`: If set to `True`, disables authorization checks on the MCP server, allowing connections to publicly accessible FHIR servers. Intended for local use only (the `stdio` transport or a loopback `FHIR_MCP_HOST`). On a network transport it cannot be combined with `FHIR_SERVER_ACCESS_TOKEN` (the server refuses to start), and a non-loopback `FHIR_MCP_HOST` is not recommended.
 - `FHIR_SERVER_CLIENT_SECRET`: The client secret corresponding to the FHIR client ID. Used during token exchange.
 - `FHIR_SERVER_BASE_URL`: The base URL of the FHIR server (e.g., `https://hapi.fhir.org/baseR4`). This is used to generate tool URIs and to route FHIR requests.
 - `FHIR_SERVER_SCOPES`: A space-separated list of OAuth2 scopes to request from the FHIR authorization server (e.g., `user/Patient.read user/Observation.read`). Add `fhirUser openid` to enable retrieval of user context for the `get_user` tool. If these two scopes are not configured, the `get_user` tool returns an empty result because the ID token lacks the user's FHIR resource reference.
-- `FHIR_SERVER_ACCESS_TOKEN`: The access token to use for authenticating requests to the FHIR server. If this variable is set, the server will bypass the OAuth2 authorization flow and use this token directly for all requests.
+- `FHIR_SERVER_ACCESS_TOKEN`: The access token to use for authenticating requests to the FHIR server. If this variable is set, the server will bypass the OAuth2 authorization flow and use this token directly for all requests. Must not be combined with `FHIR_SERVER_DISABLE_AUTHORIZATION=True` on a network transport (`streamable-http`/`sse`); the server will refuse to start.
 
 ## Tools
 

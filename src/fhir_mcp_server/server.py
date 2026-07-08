@@ -55,6 +55,53 @@ configs: ServerConfigs = ServerConfigs()
 
 server_provider: OAuthServerProvider = OAuthServerProvider(configs=configs)
 
+# Transports that open a network listener. Disabling authorization is only safe
+# when the endpoint is not remotely reachable, so these get the strict checks.
+NETWORK_TRANSPORTS: frozenset[str] = frozenset({"streamable-http", "sse"})
+
+# Interfaces that are only reachable from the local host.
+LOOPBACK_HOSTS: frozenset[str] = frozenset(
+    {"localhost", "127.0.0.1", "::1", "0:0:0:0:0:0:0:1"}
+)
+
+
+class InsecureConfigurationError(RuntimeError):
+    """Raised when the server is configured to expose FHIR data without authorization."""
+
+
+def validate_security_configuration(configs: ServerConfigs, transport: str) -> None:
+    """
+    Fail closed on configurations that would expose FHIR data over the network
+    without MCP authorization.
+
+    ``FHIR_SERVER_DISABLE_AUTHORIZATION=True`` is supported only for local use (the
+    stdio transport, or an HTTP listener bound to loopback). On a network transport
+    it must not be combined with a configured ``FHIR_SERVER_ACCESS_TOKEN``; that
+    combination is rejected. A non-loopback bind without a token is allowed but
+    logged as a warning.
+
+    Raises:
+        InsecureConfigurationError: for an unsupported authorization configuration.
+    """
+    if not configs.server_disable_authorization:
+        return
+    if transport not in NETWORK_TRANSPORTS:
+        return
+
+    if configs.server_access_token:
+        raise InsecureConfigurationError(
+            "Refusing to start: FHIR_SERVER_DISABLE_AUTHORIZATION=True is not "
+            f"supported with FHIR_SERVER_ACCESS_TOKEN on the '{transport}' transport. "
+            "Unset one of them, or use the 'stdio' transport."
+        )
+
+    if configs.mcp_host not in LOOPBACK_HOSTS:
+        logger.warning(
+            "FHIR_SERVER_DISABLE_AUTHORIZATION=True with a non-loopback "
+            "FHIR_MCP_HOST ('%s'). Bind to loopback or enable authorization.",
+            configs.mcp_host,
+        )
+
 
 async def get_user_access_token() -> OAuthToken | None:
     """
@@ -830,14 +877,18 @@ def main(transport, log_level) -> int:
         format="[%(asctime)s] %(levelname)s {%(name)s.%(funcName)s:%(lineno)d} - %(message)s",
     )
     try:
+        validate_security_configuration(configs=configs, transport=transport)
         mcp: FastMCP = configure_mcp_server()
         register_mcp_tools(mcp=mcp)
         register_mcp_routes(mcp=mcp, server_provider=server_provider)
         logger.info(f"Starting FHIR MCP server with {transport} transport")
         mcp.run(transport=transport)
+    except InsecureConfigurationError as ex:
+        logger.error("Insecure configuration detected. %s", ex)
+        raise SystemExit(1)
     except Exception as ex:
         logger.error(
             "Unable to run the FHIR MCP server. Caused by, %s", ex, exc_info=True
         )
-        return 1
+        raise SystemExit(1)
     return 0

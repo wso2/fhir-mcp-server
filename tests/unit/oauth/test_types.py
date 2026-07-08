@@ -24,6 +24,10 @@ from fhir_mcp_server.oauth.types import (
     OAuthToken,
     AuthorizationCode,
 )
+from fhir_mcp_server.server import (
+    InsecureConfigurationError,
+    validate_security_configuration,
+)
 
 
 class TestServerConfigs:
@@ -138,6 +142,75 @@ class TestServerConfigs:
         with patch.dict(os.environ, {}, clear=True):
             config = ServerConfigs(server_scopes="  read   write   admin  ", _env_file=None)
             assert config.scopes == ["read", "write", "admin"]
+
+
+class TestValidateSecurityConfiguration:
+    """Startup validation of the authorization configuration."""
+
+    def test_disabled_auth_with_token_on_network_transport_is_rejected(self):
+        with patch.dict(os.environ, {}, clear=True):
+            config = ServerConfigs(
+                server_disable_authorization=True,
+                server_access_token="fhir-token",
+                mcp_host="localhost",
+                _env_file=None,
+            )
+            with pytest.raises(InsecureConfigurationError):
+                validate_security_configuration(config, transport="streamable-http")
+
+    def test_disabled_auth_with_token_on_sse_transport_is_rejected(self):
+        with patch.dict(os.environ, {}, clear=True):
+            config = ServerConfigs(
+                server_disable_authorization=True,
+                server_access_token="fhir-token",
+                mcp_host="0.0.0.0",
+                _env_file=None,
+            )
+            with pytest.raises(InsecureConfigurationError):
+                validate_security_configuration(config, transport="sse")
+
+    def test_disabled_auth_with_token_on_stdio_is_allowed(self):
+        with patch.dict(os.environ, {}, clear=True):
+            config = ServerConfigs(
+                server_disable_authorization=True,
+                server_access_token="fhir-token",
+                _env_file=None,
+            )
+            validate_security_configuration(config, transport="stdio")
+
+    def test_disabled_auth_non_loopback_without_token_warns_not_blocks(self, caplog):
+        with patch.dict(os.environ, {}, clear=True):
+            config = ServerConfigs(
+                server_disable_authorization=True,
+                server_access_token=None,
+                mcp_host="0.0.0.0",
+                _env_file=None,
+            )
+            with caplog.at_level("WARNING"):
+                validate_security_configuration(config, transport="streamable-http")
+            assert any("non-loopback" in record.message for record in caplog.records)
+
+    def test_disabled_auth_loopback_without_token_is_silent(self, caplog):
+        with patch.dict(os.environ, {}, clear=True):
+            config = ServerConfigs(
+                server_disable_authorization=True,
+                server_access_token=None,
+                mcp_host="127.0.0.1",
+                _env_file=None,
+            )
+            with caplog.at_level("WARNING"):
+                validate_security_configuration(config, transport="streamable-http")
+            assert caplog.records == []
+
+    def test_auth_enabled_with_token_is_allowed(self):
+        with patch.dict(os.environ, {}, clear=True):
+            config = ServerConfigs(
+                server_disable_authorization=False,
+                server_access_token="fhir-token",
+                mcp_host="0.0.0.0",
+                _env_file=None,
+            )
+            validate_security_configuration(config, transport="streamable-http")
 
 
 class TestOAuthMetadata:
