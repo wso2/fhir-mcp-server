@@ -16,6 +16,7 @@
 
 import click
 import logging
+import re
 
 from fhir_mcp_server.field_filter import filter_response_fields
 from fhir_mcp_server.utils import (
@@ -41,7 +42,7 @@ from fhirpy.base.exceptions import OperationOutcome, ResourceNotFound
 from fhirpy.base.searchset import Raw
 from typing import Dict, Any, List
 from typing_extensions import Annotated
-from pydantic import AnyHttpUrl, Field
+from pydantic import AnyHttpUrl, Field, ValidationError
 from starlette.requests import Request
 from starlette.responses import RedirectResponse, Response
 from mcp.server.auth.middleware.auth_context import get_access_token
@@ -195,7 +196,6 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                     "profile-defined resource types as per the FHIR specification."
                 ),
                 examples=["Patient", "Observation", "Encounter"],
-                pattern=r"^[A-Za-z]+$",
             ),
         ],
     ) -> Annotated[
@@ -216,6 +216,12 @@ def register_mcp_tools(mcp: FastMCP) -> None:
     ]:
         try:
             logger.debug(f"Invoked with resource_type='{type}'")
+            if not re.match(r"^[A-Za-z]+$", type):
+                logger.error(f"Invalid resource type '{type}' provided to get_capabilities.")
+                return await get_operation_outcome(
+                    code="invalid",
+                    diagnostics=f"Invalid resource type '{type}'. The type must contain only alphabetic characters (e.g., 'Patient', 'Observation').",
+                )
             data: Dict[str, Any] = await get_capability_statement(configs.metadata_url)
             for resource in data["rest"][0]["resource"]:
                 if resource.get("type") == type:
@@ -239,6 +245,15 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                 code="not-supported",
                 diagnostics=f"The interaction, operation, resource or profile {type} is not supported.",
             )
+        except ValidationError as ex:
+            logger.error(
+                f"Invalid resource type '{type}' provided to get_capabilities. Caused by, ",
+                exc_info=ex,
+            )
+            return await get_operation_outcome(
+                code="invalid",
+                diagnostics=f"Invalid resource type '{type}'. The type must contain only alphabetic characters (e.g., 'Patient', 'Observation').",
+            )
         except Exception as ex:
             logger.exception(
                 f"Error while executing the FHIR metadata interaction for resource_type '{type}'. Caused by, ",
@@ -260,7 +275,6 @@ def register_mcp_tools(mcp: FastMCP) -> None:
             Field(
                 description="The FHIR resource type name. Must exactly match one of the resource types supported by the server",
                 examples=["MedicationRequest", "Condition", "Procedure"],
-                pattern=r"^[A-Za-z]+$",
             ),
         ],
         searchParam: Annotated[
@@ -302,6 +316,12 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                     "Unable to perform search operation: 'type' is a mandatory field."
                 )
                 return await get_operation_outcome_required_error("type")
+            if not re.match(r"^[A-Za-z]+$", type):
+                logger.error(f"Invalid resource type '{type}' provided to search.")
+                return await get_operation_outcome(
+                    code="invalid",
+                    diagnostics=f"Invalid resource type '{type}'. The type must contain only alphabetic characters (e.g., 'Patient', 'Observation').",
+                )
 
             client: AsyncFHIRClient = await get_async_fhir_client()
             async_resources: list[Any] = (
@@ -324,6 +344,15 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                 exc_info=ex,
             )
             return ex.resource["issue"] or await get_operation_outcome_exception()
+        except ValidationError as ex:
+            logger.error(
+                f"Invalid resource type '{type}' provided to search. Caused by, ",
+                exc_info=ex,
+            )
+            return await get_operation_outcome(
+                code="invalid",
+                diagnostics=f"Invalid resource type '{type}'. The type must contain only alphabetic characters (e.g., 'Patient', 'Observation').",
+            )
         except Exception as ex:
             logger.exception(
                 f"An unexpected error occurred during the FHIR search operation for resource: '{type}'. Caused by, ",
@@ -346,7 +375,6 @@ def register_mcp_tools(mcp: FastMCP) -> None:
             Field(
                 description="The FHIR resource type name. Must exactly match one of the resource types supported by the server.",
                 examples=["DiagnosticReport", "AllergyIntolerance", "Immunization"],
-                pattern=r"^[A-Za-z]+$",
             ),
         ],
         id: Annotated[
@@ -398,6 +426,12 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                     "Unable to perform read operation: 'type' is a mandatory field."
                 )
                 return await get_operation_outcome_required_error("type")
+            if not re.match(r"^[A-Za-z]+$", type):
+                logger.error(f"Invalid resource type '{type}' provided to read.")
+                return await get_operation_outcome(
+                    code="invalid",
+                    diagnostics=f"Invalid resource type '{type}'. The type must contain only alphabetic characters (e.g., 'Patient', 'Observation').",
+                )
 
             client: AsyncFHIRClient = await get_async_fhir_client()
             bundle: dict = await client.resource(resource_type=type, id=id).execute(
@@ -430,6 +464,15 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                 exc_info=ex,
             )
             return ex.resource["issue"] or await get_operation_outcome_exception()
+        except ValidationError as ex:
+            logger.error(
+                f"Invalid resource type '{type}' provided to read. Caused by, ",
+                exc_info=ex,
+            )
+            return await get_operation_outcome(
+                code="invalid",
+                diagnostics=f"Invalid resource type '{type}'. The type must contain only alphabetic characters (e.g., 'Patient', 'Observation').",
+            )
         except Exception as ex:
             logger.exception(
                 f"An unexpected error occurred during the FHIR read operation for resource: '{type}'. Caused by, ",
@@ -451,7 +494,6 @@ def register_mcp_tools(mcp: FastMCP) -> None:
             Field(
                 description="The FHIR resource type name. Must exactly match one of the resource types supported by the server.",
                 examples=["Device", "CarePlan", "Goal"],
-                pattern=r"^[A-Za-z]+$",
             ),
         ],
         payload: Annotated[
@@ -502,6 +544,12 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                     "Unable to perform create operation: 'type' is a mandatory field."
                 )
                 return await get_operation_outcome_required_error("type")
+            if not re.match(r"^[A-Za-z]+$", type):
+                logger.error(f"Invalid resource type '{type}' provided to create.")
+                return await get_operation_outcome(
+                    code="invalid",
+                    diagnostics=f"Invalid resource type '{type}'. The type must contain only alphabetic characters (e.g., 'Patient', 'Observation').",
+                )
 
             client: AsyncFHIRClient = await get_async_fhir_client()
             bundle: dict = await client.resource(resource_type=type).execute(
@@ -524,6 +572,15 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                 exc_info=ex,
             )
             return ex.resource["issue"] or await get_operation_outcome_exception()
+        except ValidationError as ex:
+            logger.error(
+                f"Invalid resource type '{type}' provided to create. Caused by, ",
+                exc_info=ex,
+            )
+            return await get_operation_outcome(
+                code="invalid",
+                diagnostics=f"Invalid resource type '{type}'. The type must contain only alphabetic characters (e.g., 'Patient', 'Observation').",
+            )
         except Exception as ex:
             logger.exception(
                 f"An unexpected error occurred during the FHIR create operation for resource: '{type}'. Caused by, ",
@@ -547,7 +604,6 @@ def register_mcp_tools(mcp: FastMCP) -> None:
             Field(
                 description="The FHIR resource type name. Must exactly match one of the resource types supported by the server.",
                 examples=["Location", "Organization", "Coverage"],
-                pattern=r"^[A-Za-z]+$",
             ),
         ],
         id: Annotated[
@@ -598,6 +654,12 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                     "Unable to perform update operation: 'type' is a mandatory field."
                 )
                 return await get_operation_outcome_required_error("type")
+            if not re.match(r"^[A-Za-z]+$", type):
+                logger.error(f"Invalid resource type '{type}' provided to update.")
+                return await get_operation_outcome(
+                    code="invalid",
+                    diagnostics=f"Invalid resource type '{type}'. The type must contain only alphabetic characters (e.g., 'Patient', 'Observation').",
+                )
 
             client: AsyncFHIRClient = await get_async_fhir_client()
             bundle: dict = await client.resource(resource_type=type, id=id).execute(
@@ -622,6 +684,15 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                 exc_info=ex,
             )
             return ex.resource["issue"] or await get_operation_outcome_exception()
+        except ValidationError as ex:
+            logger.error(
+                f"Invalid resource type '{type}' provided to update. Caused by, ",
+                exc_info=ex,
+            )
+            return await get_operation_outcome(
+                code="invalid",
+                diagnostics=f"Invalid resource type '{type}'. The type must contain only alphabetic characters (e.g., 'Patient', 'Observation').",
+            )
         except Exception as ex:
             logger.exception(
                 f"An unexpected error occurred during the FHIR update operation for resource: '{type}'. Caused by, ",
