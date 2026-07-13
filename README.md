@@ -415,6 +415,9 @@ These variables configure the MCP client's secure connection to the MCP server, 
 - `FHIR_SERVER_SCOPES`: A space-separated list of OAuth2 scopes to request from the FHIR authorization server (e.g., `user/Patient.read user/Observation.read`). Add `fhirUser openid` to enable retrieval of user context for the `get_user` tool. If these two scopes are not configured, the `get_user` tool returns an empty result because the ID token lacks the user's FHIR resource reference.
 - `FHIR_SERVER_ACCESS_TOKEN`: The access token to use for authenticating requests to the FHIR server. If this variable is set, the server will bypass the OAuth2 authorization flow and use this token directly for all requests.
 
+> [!NOTE]
+> `FHIR_SERVER_ACCESS_TOKEN` is intended for local `stdio` mode deployments only, as a convenience to bypass interactive OAuth authentication. Do not use this variable when the MCP server is exposed over a network or the public internet.
+
 ## Tools
 
 - `get_capabilities`: Retrieves metadata about a specified FHIR resource type, including its supported search parameters and custom operations.

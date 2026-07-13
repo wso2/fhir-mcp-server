@@ -195,6 +195,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                     "profile-defined resource types as per the FHIR specification."
                 ),
                 examples=["Patient", "Observation", "Encounter"],
+                pattern=r"^[A-Za-z]+$",
             ),
         ],
     ) -> Annotated[
@@ -259,6 +260,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
             Field(
                 description="The FHIR resource type name. Must exactly match one of the resource types supported by the server",
                 examples=["MedicationRequest", "Condition", "Procedure"],
+                pattern=r"^[A-Za-z]+$",
             ),
         ],
         searchParam: Annotated[
@@ -344,6 +346,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
             Field(
                 description="The FHIR resource type name. Must exactly match one of the resource types supported by the server.",
                 examples=["DiagnosticReport", "AllergyIntolerance", "Immunization"],
+                pattern=r"^[A-Za-z]+$",
             ),
         ],
         id: Annotated[
@@ -448,6 +451,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
             Field(
                 description="The FHIR resource type name. Must exactly match one of the resource types supported by the server.",
                 examples=["Device", "CarePlan", "Goal"],
+                pattern=r"^[A-Za-z]+$",
             ),
         ],
         payload: Annotated[
@@ -543,6 +547,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
             Field(
                 description="The FHIR resource type name. Must exactly match one of the resource types supported by the server.",
                 examples=["Location", "Organization", "Coverage"],
+                pattern=r"^[A-Za-z]+$",
             ),
         ],
         id: Annotated[
