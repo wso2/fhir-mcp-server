@@ -28,6 +28,7 @@ from fhir_mcp_server.utils import (
     get_operation_outcome_required_error,
     get_capability_statement,
     trim_resource_capabilities,
+    validate_resource_type,
 )
 from fhir_mcp_server.oauth import (
     handle_failed_authentication,
@@ -215,6 +216,8 @@ def register_mcp_tools(mcp: FastMCP) -> None:
     ]:
         try:
             logger.debug(f"Invoked with resource_type='{type}'")
+            if outcome := await validate_resource_type(type):
+                return outcome
             data: Dict[str, Any] = await get_capability_statement(configs.metadata_url)
             for resource in data["rest"][0]["resource"]:
                 if resource.get("type") == type:
@@ -300,6 +303,8 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                     "Unable to perform search operation: 'type' is a mandatory field."
                 )
                 return await get_operation_outcome_required_error("type")
+            if outcome := await validate_resource_type(type):
+                return outcome
 
             client: AsyncFHIRClient = await get_async_fhir_client()
             async_resources: list[Any] = (
@@ -395,6 +400,8 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                     "Unable to perform read operation: 'type' is a mandatory field."
                 )
                 return await get_operation_outcome_required_error("type")
+            if outcome := await validate_resource_type(type):
+                return outcome
 
             client: AsyncFHIRClient = await get_async_fhir_client()
             bundle: dict = await client.resource(resource_type=type, id=id).execute(
@@ -498,6 +505,8 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                     "Unable to perform create operation: 'type' is a mandatory field."
                 )
                 return await get_operation_outcome_required_error("type")
+            if outcome := await validate_resource_type(type):
+                return outcome
 
             client: AsyncFHIRClient = await get_async_fhir_client()
             bundle: dict = await client.resource(resource_type=type).execute(
@@ -593,6 +602,8 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                     "Unable to perform update operation: 'type' is a mandatory field."
                 )
                 return await get_operation_outcome_required_error("type")
+            if outcome := await validate_resource_type(type):
+                return outcome
 
             client: AsyncFHIRClient = await get_async_fhir_client()
             bundle: dict = await client.resource(resource_type=type, id=id).execute(
@@ -682,6 +693,8 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                     "Unable to perform delete operation: 'type' is a mandatory field."
                 )
                 return await get_operation_outcome_required_error("type")
+            if outcome := await validate_resource_type(type):
+                return outcome
             if not id and not searchParam:
                 logger.error(
                     "Unable to perform delete operation: 'id' or 'searchParam' is required."
