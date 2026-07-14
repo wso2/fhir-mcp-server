@@ -16,6 +16,9 @@
 
 import aiohttp
 import logging
+import re
+
+from pydantic import ValidationError
 
 from fhir_mcp_server.oauth import ServerConfigs
 
@@ -90,6 +93,27 @@ async def get_operation_outcome_required_error(element: str = "") -> dict:
     return await get_operation_outcome(
         code="required", diagnostics=f"A required element {element} is missing."
     )
+
+
+async def validate_resource_type(resource_type: str) -> dict | None:
+    try:
+        if not re.match(r"^[A-Za-z]+$", resource_type):
+            logger.error(
+                f"Invalid resource type '{resource_type}': must contain only alphabetic characters."
+            )
+            return await get_operation_outcome(
+                code="invalid",
+                diagnostics=f"Invalid resource type '{resource_type}'. The type must contain only alphabetic characters (e.g., 'Patient', 'Observation').",
+            )
+    except ValidationError as ex:
+        logger.error(
+            f"Invalid resource type '{resource_type}' provided. Caused by, ", exc_info=ex
+        )
+        return await get_operation_outcome(
+            code="invalid",
+            diagnostics=f"Invalid resource type '{resource_type}'. The type must contain only alphabetic characters (e.g., 'Patient', 'Observation').",
+        )
+    return None
 
 
 async def get_operation_outcome(
