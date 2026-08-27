@@ -17,6 +17,7 @@
 import base64
 import json
 import logging
+import re
 
 from typing import Any, Dict
 from pydantic import AnyHttpUrl, BaseModel
@@ -147,9 +148,12 @@ class OAuthToken(BaseModel):
 
 
 # SMART on FHIR interaction permission letters (SMART App Launch v2).
+# A grant suffix is a subset of the in-order string "cruds".
 _PERMISSION_ORDER = "cruds"
-_CREATE, _READ, _UPDATE, _DELETE, _SEARCH = "c", "r", "u", "d", "s"
-_ALL_PERMISSIONS = {_CREATE, _READ, _UPDATE, _DELETE, _SEARCH}
+_ALL_PERMISSIONS = set(_PERMISSION_ORDER)
+_READ_PERMISSIONS = {"r", "s"}
+_WRITE_PERMISSIONS = {"c", "u", "d"}
+_V2_SUFFIX = re.compile(r"c?r?u?d?s?")
 
 
 def _permission_letters(access: str) -> set[str]:
@@ -164,13 +168,17 @@ def _permission_letters(access: str) -> set[str]:
     if access == "*":
         return set(_ALL_PERMISSIONS)
     if access == "read":
-        return {_READ, _SEARCH}
+        return set(_READ_PERMISSIONS)
     if access == "write":
-        return {_CREATE, _UPDATE, _DELETE}
-    if access and all(ch in _PERMISSION_ORDER for ch in access):
-        if access == "".join(sorted(access, key=_PERMISSION_ORDER.index)):
-            return set(access)
+        return set(_WRITE_PERMISSIONS)
+    if _V2_SUFFIX.fullmatch(access):
+        return set(access)
     return set()
+
+
+def _segment_matches(granted: str, required: str) -> bool:
+    """True when a scope segment matches, treating ``*`` as a wildcard."""
+    return granted == required or granted == "*" or required == "*"
 
 
 def scope_matches(granted_scope: str, required_scope: str) -> bool:
@@ -196,29 +204,27 @@ def scope_matches(granted_scope: str, required_scope: str) -> bool:
         return True
     if not granted_scope or not required_scope:
         return False
-    if granted_scope.count("/") != required_scope.count("/"):
-        return False
-    granted_context, granted_rest = granted_scope.split("/", 1)
-    required_context, required_rest = required_scope.split("/", 1)
-    if not (
-        granted_context == required_context
-        or granted_context == "*"
-        or required_context == "*"
-    ):
-        return False
-    granted_parts = granted_rest.split(".")
-    required_parts = required_rest.split(".")
+
+    def parts(scope: str) -> list[str]:
+        return scope.replace("/", ".").split(".")
+
+    granted_parts = parts(granted_scope)
+    required_parts = parts(required_scope)
     if len(granted_parts) != len(required_parts):
         return False
-    if not (
-        granted_parts[0] == required_parts[0]
-        or granted_parts[0] == "*"
-        or required_parts[0] == "*"
+
+    # Compare structural segments (context and resource type) with wildcards.
+    for granted_segment, required_segment in zip(
+        granted_parts[:-1], required_parts[:-1]
     ):
-        return False
-    granted_access, required_access = granted_parts[1], required_parts[1]
-    if granted_access == "*" or granted_access == required_access:
+        if not _segment_matches(granted_segment, required_segment):
+            return False
+
+    # Compare the interaction segment by resolved permissions.
+    granted_access, required_access = granted_parts[-1], required_parts[-1]
+    if _segment_matches(granted_access, required_access):
         return True
+
     granted_ops = _permission_letters(granted_access)
     required_ops = _permission_letters(required_access)
     if not granted_ops or not required_ops:
