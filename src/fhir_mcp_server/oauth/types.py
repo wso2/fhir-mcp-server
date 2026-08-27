@@ -124,6 +124,7 @@ class OAuthToken(BaseModel):
     expires_at: float | None = None
     id_token: str | None = None
     client_id: str | None = None
+    is_static_config_token: bool = False
 
     @property
     def scopes(self) -> list[str]:
@@ -143,6 +144,101 @@ class OAuthToken(BaseModel):
             return None
 
         return IDToken.model_validate(payload)
+
+
+# SMART on FHIR interaction permission letters (SMART App Launch v2).
+_PERMISSION_ORDER = "cruds"
+_CREATE, _READ, _UPDATE, _DELETE, _SEARCH = "c", "r", "u", "d", "s"
+_ALL_PERMISSIONS = {_CREATE, _READ, _UPDATE, _DELETE, _SEARCH}
+
+
+def _permission_letters(access: str) -> set[str]:
+    """
+    Return the set of SMART interaction letters granted by an access segment.
+
+    Handles both SMART v1 (.read/.write) and v2 (in-order subset of ``cruds``,
+    e.g. ``.rs``, ``.cud``, ``.cruds``) syntax. ``*`` grants every interaction.
+    Returns an empty set for unknown access segments.
+    """
+    access = access.strip()
+    if access == "*":
+        return set(_ALL_PERMISSIONS)
+    if access == "read":
+        return {_READ, _SEARCH}
+    if access == "write":
+        return {_CREATE, _UPDATE, _DELETE}
+    if access and all(ch in _PERMISSION_ORDER for ch in access):
+        if access == "".join(sorted(access, key=_PERMISSION_ORDER.index)):
+            return set(access)
+    return set()
+
+
+def scope_matches(granted_scope: str, required_scope: str) -> bool:
+    """
+    Check whether a single granted scope authorises the required scope.
+
+    Matching is SMART-on-FHIR aware: scopes are compared on their context
+    (``user``/``patient``/``system``), resource type and interaction segment,
+    with ``*`` treated as a wildcard. Interaction grants are resolved to the
+    underlying operations so a v2 grant such as ``user/Patient.rs`` satisfies a
+    v1 ``.read`` requirement, and ``user/Patient.cud`` satisfies ``.write``.
+    The ``is_static_config_token``/system path is unaffected.
+
+    Examples:
+        scope_matches("user/Patient.read", "user/Patient.read") -> True
+        scope_matches("user/*.read", "user/Patient.read")       -> True
+        scope_matches("user/Patient.rs", "user/Patient.read")   -> True
+        scope_matches("user/Patient.cud", "user/Patient.write") -> True
+        scope_matches("user/*.*", "user/Patient.write")         -> True
+        scope_matches("user/Patient.write", "user/Patient.read")-> False
+    """
+    if granted_scope == required_scope:
+        return True
+    if not granted_scope or not required_scope:
+        return False
+    if granted_scope.count("/") != required_scope.count("/"):
+        return False
+    granted_context, granted_rest = granted_scope.split("/", 1)
+    required_context, required_rest = required_scope.split("/", 1)
+    if not (
+        granted_context == required_context
+        or granted_context == "*"
+        or required_context == "*"
+    ):
+        return False
+    granted_parts = granted_rest.split(".")
+    required_parts = required_rest.split(".")
+    if len(granted_parts) != len(required_parts):
+        return False
+    if not (
+        granted_parts[0] == required_parts[0]
+        or granted_parts[0] == "*"
+        or required_parts[0] == "*"
+    ):
+        return False
+    granted_access, required_access = granted_parts[1], required_parts[1]
+    if granted_access == "*" or granted_access == required_access:
+        return True
+    granted_ops = _permission_letters(granted_access)
+    required_ops = _permission_letters(required_access)
+    if not granted_ops or not required_ops:
+        return False
+    return required_ops.issubset(granted_ops)
+
+
+def has_scope(required_scope: str, granted_scopes: list[str] | str | None) -> bool:
+    """
+    Return True if any of the granted scopes authorises the required scope.
+
+    Args:
+        required_scope: The scope required to perform an action (e.g. ``user/Patient.read``).
+        granted_scopes: The scopes held by the token, as a list or a space-separated string.
+    """
+    if isinstance(granted_scopes, str):
+        granted_scopes = [s.strip() for s in granted_scopes.split(" ") if s.strip()]
+    if not granted_scopes:
+        return False
+    return any(scope_matches(granted, required_scope) for granted in granted_scopes)
 
 
 class AuthorizationCode(BaseModel):
