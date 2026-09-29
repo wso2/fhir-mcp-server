@@ -1,4 +1,4 @@
-# Copyright (c) 2025, WSO2 LLC. (https://www.wso2.com/) All Rights Reserved.
+# Copyright (c) 2026, WSO2 LLC. (https://www.wso2.com/) All Rights Reserved.
 
 # WSO2 LLC. licenses this file to you under the Apache License,
 # Version 2.0 (the "License"); you may not use this file except
@@ -115,6 +115,43 @@ async def validate_resource_type(resource_type: str) -> dict | None:
         )
     return None
 
+
+async def validate_resource_id(resource_id: str) -> dict | None:
+    """Validate a FHIR logical id before it is interpolated into a request path.
+
+   Rejects path separators, dot-segments and percent-encoded traversal sequences
+   that would otherwise let the id escape the configured FHIR base path.
+   """
+    if not resource_id:
+        return None  # empty id is valid: update/delete allow conditional operations
+
+    # '.' is a legal FHIR id character, so dot-only ids (e.g. "..") must be rejected separately.
+    if not re.fullmatch(r"[A-Za-z0-9\-\.]{1,64}", resource_id) or re.fullmatch(
+        r"\.+", resource_id
+    ):
+        logger.error(
+            f"Invalid resource id '{resource_id}': must be 1-64 characters of letters, digits, '-' or '.', and not only dots."
+        )
+        return await get_operation_outcome(
+            code="invalid",
+            diagnostics=f"Invalid resource id '{resource_id}'. The id must be 1-64 characters of letters, digits, '-' or '.' (e.g., '123', 'patient-001').",
+        )
+    return None
+
+
+async def validate_operation(operation: str) -> dict | None:
+    """Validate a FHIR operation name before it is interpolated into a request path."""
+    if not operation:
+        return None  # operation is optional
+    if not re.fullmatch(r"[$_]?[A-Za-z][A-Za-z0-9\-]{0,63}", operation):
+        logger.error(
+            f"Invalid operation '{operation}': must be an alphanumeric name, optionally prefixed with '$' or '_'."
+        )
+        return await get_operation_outcome(
+            code="invalid",
+            diagnostics=f"Invalid operation '{operation}'. The operation must be an alphanumeric name optionally prefixed with '$' or '_' (e.g., '$everything', '_history').",
+        )
+    return None
 
 async def get_operation_outcome(
     code: str, diagnostics: str, severity: str = "error"

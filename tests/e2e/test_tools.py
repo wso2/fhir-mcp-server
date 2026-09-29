@@ -259,3 +259,143 @@ async def extract_resource(tool_result: types.CallToolResult) -> Dict:
     assert text, "No text content in tool_result"
 
     return json.loads(text)
+
+
+# ---------------------------------------------------------------------------
+# Path-traversal regression tests
+#
+# These use the same MCP client -> MCP server -> FHIR tool path as the tests
+# above, but the MCP server is started against a local recording FHIR stub
+# (`mcp_server_with_recording_fhir`) instead of the live public server. The MCP
+# server runs in a separate process, so the stub is the boundary at which
+# "was an outbound FHIR request made?" can be observed.
+#
+# `tests/unit/test_utils.py::TestPathParameterValidation` already covers which
+# ids and operations the validators accept. What these tests add is that each
+# guarded tool actually *calls* those validators, and does so *before* any
+# request reaches the FHIR server.
+# ---------------------------------------------------------------------------
+
+# `read`, `update` and `delete` interpolate an id into the request path;
+# `create` has no id, so only its operation is guarded.
+ID_GUARDED_TOOLS = ["read", "update", "delete"]
+OPERATION_GUARDED_TOOLS = ["read", "update", "delete", "create"]
+
+SAMPLE_PAYLOAD = {"resourceType": "Patient", "gender": "male"}
+VALID_ID = "123"
+
+EXPECTED_METHOD = {"read": "GET", "create": "POST", "update": "PUT", "delete": "DELETE"}
+
+
+def build_arguments(tool: str, id: str = VALID_ID, operation: str = "") -> Dict:
+    """Build the minimum valid argument set for a tool, less what's under test."""
+    arguments: Dict = {"type": "Patient"}
+    if tool in ID_GUARDED_TOOLS:
+        arguments["id"] = id
+    if tool in ("create", "update"):
+        arguments["payload"] = SAMPLE_PAYLOAD
+    if operation:
+        arguments["operation"] = operation
+    return arguments
+
+
+def assert_is_invalid_outcome(resource: Dict) -> None:
+    assert (
+        resource.get("resourceType") == "OperationOutcome"
+    ), f"Expected an OperationOutcome, got: {resource}"
+
+    issues = resource.get("issue") or []
+    assert issues, f"OperationOutcome carried no issue: {resource}"
+    assert any(
+        issue.get("severity") == "error" and issue.get("code") == "invalid"
+        for issue in issues
+    ), f"Expected an error/invalid issue, got: {issues}"
+
+
+async def call_tool(tool: str, arguments: Dict) -> Dict:
+    logger.debug(f"[TEST REQUEST] {tool}: {arguments}")
+    try:
+        async with create_mcp_session() as mcp_session:
+            tool_result: types.CallToolResult = await mcp_session.call_tool(
+                name=tool, arguments=arguments
+            )
+            return await extract_resource(tool_result)
+    except asyncio.TimeoutError as ex:
+        logger.error(
+            f"[TOOL RESPONSE] Timeout waiting for {tool} response from MCP server",
+            exc_info=ex,
+        )
+        raise
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("tool", ID_GUARDED_TOOLS)
+@pytest.mark.parametrize(
+    "traversing_id",
+    [
+        # Satisfies the FHIR spec's own id regex ([A-Za-z0-9\-\.]{1,64}) and is
+        # caught only by the explicit dot-segment check.
+        pytest.param("..", id="bare-dot-segment"),
+        pytest.param("../../etc/passwd", id="relative-traversal"),
+        pytest.param("%2e%2e%2fPatient", id="percent-encoded-traversal"),
+    ],
+)
+async def test_traversing_id_is_blocked_before_any_http_request(
+    mcp_server_with_recording_fhir, tool, traversing_id
+):
+    fhir_requests = mcp_server_with_recording_fhir.requests
+
+    response: Dict = await call_tool(tool, build_arguments(tool, id=traversing_id))
+
+    assert_is_invalid_outcome(response)
+    assert fhir_requests == [], (
+        f"'{tool}' with traversing id {traversing_id!r} made "
+        f"outbound FHIR request(s): {fhir_requests}"
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("tool", OPERATION_GUARDED_TOOLS)
+async def test_traversing_operation_is_blocked_before_any_http_request(
+    mcp_server_with_recording_fhir, tool
+):
+    fhir_requests = mcp_server_with_recording_fhir.requests
+
+    response: Dict = await call_tool(
+        tool, build_arguments(tool, operation="../../../metadata")
+    )
+
+    assert_is_invalid_outcome(response)
+    assert fhir_requests == [], (
+        f"'{tool}' with traversing operation made "
+        f"outbound FHIR request(s): {fhir_requests}"
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("tool", OPERATION_GUARDED_TOOLS)
+async def test_valid_input_reaches_the_fhir_server(
+    mcp_server_with_recording_fhir, tool
+):
+    """Guards the two tests above against passing vacuously.
+
+    Well-formed input must still reach the FHIR server. If this fails, the
+    stub is no longer observing that tool's requests and its "no request was
+    made" assertions prove nothing.
+    """
+    fhir_requests = mcp_server_with_recording_fhir.requests
+
+    await call_tool(tool, build_arguments(tool))
+
+    assert len(fhir_requests) == 1, (
+        f"Expected exactly one outbound FHIR request from '{tool}', "
+        f"recorded: {fhir_requests}"
+    )
+
+    method, path = fhir_requests[0]
+    assert method == EXPECTED_METHOD[tool], (
+        f"Expected a {EXPECTED_METHOD[tool]} from '{tool}', got {method}"
+    )
+
+    expected_path = "/Patient" if tool == "create" else f"/Patient/{VALID_ID}"
+    assert path.startswith(expected_path), f"Unexpected request path: {path}"

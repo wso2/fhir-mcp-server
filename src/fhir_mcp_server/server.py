@@ -1,4 +1,4 @@
-# Copyright (c) 2025, WSO2 LLC. (https://www.wso2.com/) All Rights Reserved.
+# Copyright (c) 2026, WSO2 LLC. (https://www.wso2.com/) All Rights Reserved.
 
 # WSO2 LLC. licenses this file to you under the Apache License,
 # Version 2.0 (the "License"); you may not use this file except
@@ -29,6 +29,8 @@ from fhir_mcp_server.utils import (
     get_capability_statement,
     trim_resource_capabilities,
     validate_resource_type,
+    validate_operation,
+    validate_resource_id
 )
 from fhir_mcp_server.oauth import (
     handle_failed_authentication,
@@ -400,7 +402,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                     "Unable to perform read operation: 'type' is a mandatory field."
                 )
                 return await get_operation_outcome_required_error("type")
-            if outcome := await validate_resource_type(type):
+            if outcome := (await validate_resource_type(type) or await validate_resource_id(id) or await validate_operation(operation)):
                 return outcome
 
             client: AsyncFHIRClient = await get_async_fhir_client()
@@ -505,7 +507,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                     "Unable to perform create operation: 'type' is a mandatory field."
                 )
                 return await get_operation_outcome_required_error("type")
-            if outcome := await validate_resource_type(type):
+            if outcome := (await validate_resource_type(type) or await validate_operation(operation)):
                 return outcome
 
             client: AsyncFHIRClient = await get_async_fhir_client()
@@ -602,7 +604,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                     "Unable to perform update operation: 'type' is a mandatory field."
                 )
                 return await get_operation_outcome_required_error("type")
-            if outcome := await validate_resource_type(type):
+            if outcome := (await validate_resource_type(type) or await validate_resource_id(id) or await validate_operation(operation)):
                 return outcome
 
             client: AsyncFHIRClient = await get_async_fhir_client()
@@ -693,7 +695,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                     "Unable to perform delete operation: 'type' is a mandatory field."
                 )
                 return await get_operation_outcome_required_error("type")
-            if outcome := await validate_resource_type(type):
+            if outcome := (await validate_resource_type(type) or await validate_resource_id(id) or await validate_operation(operation)):
                 return outcome
             if not id and not searchParam:
                 logger.error(

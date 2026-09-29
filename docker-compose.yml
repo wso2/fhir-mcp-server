@@ -18,7 +18,7 @@ services:
       - hapi.fhir.allow_external_references=true
       - spring.datasource.username=postgres
     ports:
-      - 8080:8080
+      - 127.0.0.1:8080:8080
     volumes: []
     networks:
       - hapi-fhir_network
@@ -40,7 +40,7 @@ services:
       FHIR_MCP_REQUEST_TIMEOUT: "30"
       FHIR_SERVER_DISABLE_AUTHORIZATION: True
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     networks:
       - hapi-fhir_network
 networks:
