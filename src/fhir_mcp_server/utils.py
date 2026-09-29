@@ -97,13 +97,13 @@ async def get_operation_outcome_required_error(element: str = "") -> dict:
 
 async def validate_resource_type(resource_type: str) -> dict | None:
     try:
-        if not re.match(r"^[A-Za-z]+$", resource_type):
+        if not re.fullmatch(r"[A-Za-z]{1,64}", resource_type):
             logger.error(
-                f"Invalid resource type '{resource_type}': must contain only alphabetic characters."
+                f"Invalid resource type '{resource_type}': must be 1-64 alphabetic characters."
             )
             return await get_operation_outcome(
                 code="invalid",
-                diagnostics=f"Invalid resource type '{resource_type}'. The type must contain only alphabetic characters (e.g., 'Patient', 'Observation').",
+                diagnostics=f"Invalid resource type '{resource_type}'. The type must be 1-64 alphabetic characters (e.g., 'Patient', 'Observation').",
             )
     except ValidationError as ex:
         logger.error(
@@ -111,7 +111,7 @@ async def validate_resource_type(resource_type: str) -> dict | None:
         )
         return await get_operation_outcome(
             code="invalid",
-            diagnostics=f"Invalid resource type '{resource_type}'. The type must contain only alphabetic characters (e.g., 'Patient', 'Observation').",
+            diagnostics=f"Invalid resource type '{resource_type}'. The type must be 1-64 alphabetic characters (e.g., 'Patient', 'Observation').",
         )
     return None
 
@@ -152,6 +152,21 @@ async def validate_operation(operation: str) -> dict | None:
             diagnostics=f"Invalid operation '{operation}'. The operation must be an alphanumeric name optionally prefixed with '$' or '_' (e.g., '$everything', '_history').",
         )
     return None
+
+async def validate_inputs(
+    resource_type: str, resource_id: str = "", operation: str = ""
+) -> dict | None:
+    """Validate the type/id/operation path parameters for an FHIR interaction.
+
+    Runs the individual validators in order and returns the first failure, or
+    None if all inputs are valid.
+    """
+    return (
+        await validate_resource_type(resource_type)
+        or await validate_resource_id(resource_id)
+        or await validate_operation(operation)
+    )
+
 
 async def get_operation_outcome(
     code: str, diagnostics: str, severity: str = "error"
