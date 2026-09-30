@@ -16,13 +16,14 @@
 
 from .common import handle_failed_authentication
 from .server_provider import OAuthServerProvider
-from .types import ServerConfigs, OAuthToken, IDToken, decode_jws
+from .types import ServerConfigs, OAuthToken, IDToken, decode_jws, has_scope
 
 __all__ = [
+    "decode_jws",
     "handle_failed_authentication",
+    "has_scope",
+    "IDToken",
     "OAuthServerProvider",
     "OAuthToken",
     "ServerConfigs",
-    "IDToken",
-    "decode_jws",
 ]

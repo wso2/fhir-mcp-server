@@ -23,6 +23,8 @@ from fhir_mcp_server.oauth.types import (
     OAuthMetadata,
     OAuthToken,
     AuthorizationCode,
+    scope_matches,
+    has_scope,
 )
 
 
@@ -261,3 +263,81 @@ class TestAuthorizationCode:
                 # Missing required fields
                 code="test_code"
             ) # type: ignore
+
+
+class TestScopeMatching:
+    """Test the scope_matches helper."""
+
+    def test_exact_match(self):
+        assert scope_matches("user/Patient.read", "user/Patient.read") is True
+
+    def test_resource_type_wildcard(self):
+        assert scope_matches("user/*.read", "user/Patient.read") is True
+
+    def test_access_wildcard(self):
+        assert scope_matches("user/*.*", "user/Patient.write") is True
+
+    def test_v2_rs_grant_covers_read(self):
+        assert scope_matches("user/Patient.rs", "user/Patient.read") is True
+
+    def test_v2_cud_grant_covers_write(self):
+        assert scope_matches("user/Patient.cud", "user/Patient.write") is True
+
+    def test_v2_cruds_grant_covers_read(self):
+        assert scope_matches("user/Patient.cruds", "user/Patient.read") is True
+
+    def test_v2_wildcard_rs_grant_covers_read(self):
+        assert scope_matches("user/*.rs", "user/Patient.read") is True
+
+    def test_v2_read_grant_does_not_cover_write(self):
+        assert scope_matches("user/Patient.rs", "user/Patient.write") is False
+
+    def test_v2_write_grant_does_not_cover_read(self):
+        assert scope_matches("user/Patient.cud", "user/Patient.read") is False
+
+    def test_v2_partial_suffix_does_not_cover_write(self):
+        assert scope_matches("user/Patient.cu", "user/Patient.write") is False
+
+    def test_v2_out_of_order_suffix_rejected(self):
+        assert scope_matches("user/Patient.dus", "user/Patient.read") is False
+
+    def test_context_mismatch(self):
+        assert scope_matches("patient/Patient.read", "user/Patient.read") is False
+
+    def test_access_mismatch(self):
+        assert scope_matches("user/Patient.write", "user/Patient.read") is False
+
+    def test_segment_count_mismatch(self):
+        assert scope_matches("user/Patient", "user/Patient.read") is False
+
+    def test_non_smart_scope_no_match(self):
+        assert scope_matches("openid", "user/Patient.read") is False
+
+    def test_leading_space_scope_no_match(self):
+        assert scope_matches(" user/Patient.read", "user/Patient.read") is False
+
+
+class TestHasScope:
+    """Test the has_scope helper."""
+
+    def test_list_contains_exact_scope(self):
+        assert has_scope("user/Patient.read", ["user/Patient.read"]) is True
+
+    def test_space_separated_string(self):
+        assert has_scope("user/Patient.read", "openid user/Patient.read") is True
+
+    def test_wildcard_covers_required(self):
+        assert has_scope("user/Patient.write", ["user/*.write"]) is True
+
+    def test_v2_rs_grant_covers_read(self):
+        assert has_scope("user/Patient.read", ["user/Patient.rs"]) is True
+
+    def test_missing_scope(self):
+        assert has_scope("user/Patient.write", ["user/Patient.read"]) is False
+
+    def test_empty_granted(self):
+        assert has_scope("user/Patient.read", []) is False
+        assert has_scope("user/Patient.read", None) is False
+
+    def test_empty_granted_string(self):
+        assert has_scope("user/Patient.read", "") is False

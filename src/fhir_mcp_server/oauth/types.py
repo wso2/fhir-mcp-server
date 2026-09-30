@@ -17,6 +17,7 @@
 import base64
 import json
 import logging
+import re
 
 from typing import Any, Dict
 from pydantic import AnyHttpUrl, BaseModel
@@ -124,6 +125,7 @@ class OAuthToken(BaseModel):
     expires_at: float | None = None
     id_token: str | None = None
     client_id: str | None = None
+    is_static_config_token: bool = False
 
     @property
     def scopes(self) -> list[str]:
@@ -143,6 +145,106 @@ class OAuthToken(BaseModel):
             return None
 
         return IDToken.model_validate(payload)
+
+
+# SMART on FHIR interaction permission letters (SMART App Launch v2).
+# A grant suffix is a subset of the in-order string "cruds".
+_PERMISSION_ORDER = "cruds"
+_ALL_PERMISSIONS = set(_PERMISSION_ORDER)
+_READ_PERMISSIONS = {"r", "s"}
+_WRITE_PERMISSIONS = {"c", "u", "d"}
+_V2_SUFFIX = re.compile(r"c?r?u?d?s?")
+
+
+def _permission_letters(access: str) -> set[str]:
+    """
+    Return the set of SMART interaction letters granted by an access segment.
+
+    Handles both SMART v1 (.read/.write) and v2 (in-order subset of ``cruds``,
+    e.g. ``.rs``, ``.cud``, ``.cruds``) syntax. ``*`` grants every interaction.
+    Returns an empty set for unknown access segments.
+    """
+    access = access.strip()
+    if access == "*":
+        return set(_ALL_PERMISSIONS)
+    if access == "read":
+        return set(_READ_PERMISSIONS)
+    if access == "write":
+        return set(_WRITE_PERMISSIONS)
+    if _V2_SUFFIX.fullmatch(access):
+        return set(access)
+    return set()
+
+
+def _segment_matches(granted: str, required: str) -> bool:
+    """True when a scope segment matches, treating ``*`` as a wildcard."""
+    return granted == required or granted == "*" or required == "*"
+
+
+def scope_matches(granted_scope: str, required_scope: str) -> bool:
+    """
+    Check whether a single granted scope authorises the required scope.
+
+    Matching is SMART-on-FHIR aware: scopes are compared on their context
+    (``user``/``patient``/``system``), resource type and interaction segment,
+    with ``*`` treated as a wildcard. Interaction grants are resolved to the
+    underlying operations so a v2 grant such as ``user/Patient.rs`` satisfies a
+    v1 ``.read`` requirement, and ``user/Patient.cud`` satisfies ``.write``.
+    The ``is_static_config_token``/system path is unaffected.
+
+    Examples:
+        scope_matches("user/Patient.read", "user/Patient.read") -> True
+        scope_matches("user/*.read", "user/Patient.read")       -> True
+        scope_matches("user/Patient.rs", "user/Patient.read")   -> True
+        scope_matches("user/Patient.cud", "user/Patient.write") -> True
+        scope_matches("user/*.*", "user/Patient.write")         -> True
+        scope_matches("user/Patient.write", "user/Patient.read")-> False
+    """
+    if granted_scope == required_scope:
+        return True
+    if not granted_scope or not required_scope:
+        return False
+
+    def parts(scope: str) -> list[str]:
+        return scope.replace("/", ".").split(".")
+
+    granted_parts = parts(granted_scope)
+    required_parts = parts(required_scope)
+    if len(granted_parts) != len(required_parts):
+        return False
+
+    # Compare structural segments (context and resource type) with wildcards.
+    for granted_segment, required_segment in zip(
+        granted_parts[:-1], required_parts[:-1]
+    ):
+        if not _segment_matches(granted_segment, required_segment):
+            return False
+
+    # Compare the interaction segment by resolved permissions.
+    granted_access, required_access = granted_parts[-1], required_parts[-1]
+    if _segment_matches(granted_access, required_access):
+        return True
+
+    granted_ops = _permission_letters(granted_access)
+    required_ops = _permission_letters(required_access)
+    if not granted_ops or not required_ops:
+        return False
+    return required_ops.issubset(granted_ops)
+
+
+def has_scope(required_scope: str, granted_scopes: list[str] | str | None) -> bool:
+    """
+    Return True if any of the granted scopes authorises the required scope.
+
+    Args:
+        required_scope: The scope required to perform an action (e.g. ``user/Patient.read``).
+        granted_scopes: The scopes held by the token, as a list or a space-separated string.
+    """
+    if isinstance(granted_scopes, str):
+        granted_scopes = [s.strip() for s in granted_scopes.split(" ") if s.strip()]
+    if not granted_scopes:
+        return False
+    return any(scope_matches(granted, required_scope) for granted in granted_scopes)
 
 
 class AuthorizationCode(BaseModel):

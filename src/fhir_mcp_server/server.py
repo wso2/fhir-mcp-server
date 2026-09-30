@@ -33,6 +33,7 @@ from fhir_mcp_server.utils import (
 )
 from fhir_mcp_server.oauth import (
     handle_failed_authentication,
+    has_scope,
     OAuthServerProvider,
     OAuthToken,
     ServerConfigs,
@@ -69,6 +70,7 @@ async def get_user_access_token() -> OAuthToken | None:
             access_token=configs.server_access_token,
             token_type="Bearer",
             client_id=configs.server_client_id,
+            is_static_config_token=True,
         )
 
     user_token: AccessToken | None = get_access_token()
@@ -88,10 +90,18 @@ async def get_user_access_token() -> OAuthToken | None:
     )
 
 
-async def get_async_fhir_client() -> AsyncFHIRClient:
+async def get_async_fhir_client(
+    *, require_scope: str | None = None
+) -> AsyncFHIRClient:
     """
     Get an async FHIR client with the user's access token.
     Returns an AsyncFHIRClient instance.
+
+    Args:
+        require_scope: An optional SMART scope (e.g. ``user/Patient.read``) that
+            must be present in the user's token. When the user is authenticated and
+            this scope is missing, a ValueError is raised so the caller can report
+            a forbidden/permission error.
     """
     client_kwargs: Dict = {
         "config": configs,
@@ -105,6 +115,15 @@ async def get_async_fhir_client() -> AsyncFHIRClient:
             logger.error("User is not authenticated.")
             raise ValueError("User is not authenticated.")
     else:
+        if (
+            require_scope
+            and not user_token.is_static_config_token
+            and not has_scope(require_scope, user_token.scopes)
+        ):
+            logger.error(
+                f"User token does not include the required scope: {require_scope}."
+            )
+            raise ValueError(f"Missing required scope: {require_scope}")
         client_kwargs["access_token"] = user_token.access_token
 
     return await create_async_fhir_client(**client_kwargs)
@@ -307,7 +326,9 @@ def register_mcp_tools(mcp: FastMCP) -> None:
             if outcome := await validate_resource_type(type):
                 return outcome
 
-            client: AsyncFHIRClient = await get_async_fhir_client()
+            client: AsyncFHIRClient = await get_async_fhir_client(
+                require_scope=f"user/{type}.read"
+            )
             async_resources: list[Any] = (
                 await client.resources(type).search(Raw(**searchParam)).fetch_raw()
             )
@@ -404,7 +425,9 @@ def register_mcp_tools(mcp: FastMCP) -> None:
             if outcome := await validate_inputs(type, id, operation):
                 return outcome
 
-            client: AsyncFHIRClient = await get_async_fhir_client()
+            client: AsyncFHIRClient = await get_async_fhir_client(
+                require_scope=f"user/{type}.read"
+            )
             bundle: dict = await client.resource(resource_type=type, id=id).execute(
                 operation=operation or "", method="GET", params=searchParam
             )
@@ -509,7 +532,9 @@ def register_mcp_tools(mcp: FastMCP) -> None:
             if outcome := await validate_inputs(type, operation=operation):
                 return outcome
 
-            client: AsyncFHIRClient = await get_async_fhir_client()
+            client: AsyncFHIRClient = await get_async_fhir_client(
+                require_scope=f"user/{type}.write"
+            )
             bundle: dict = await client.resource(resource_type=type).execute(
                 operation=operation or "", data=payload, params=searchParam
             )
@@ -606,7 +631,9 @@ def register_mcp_tools(mcp: FastMCP) -> None:
             if outcome := await validate_inputs(type, id, operation):
                 return outcome
 
-            client: AsyncFHIRClient = await get_async_fhir_client()
+            client: AsyncFHIRClient = await get_async_fhir_client(
+                require_scope=f"user/{type}.write"
+            )
             bundle: dict = await client.resource(resource_type=type, id=id).execute(
                 operation=operation or "",
                 method="PUT",
@@ -702,7 +729,9 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                 )
                 return await get_operation_outcome_required_error("id")
 
-            client: AsyncFHIRClient = await get_async_fhir_client()
+            client: AsyncFHIRClient = await get_async_fhir_client(
+                require_scope=f"user/{type}.write"
+            )
             bundle = await client.resource(resource_type=type, id=id).execute(
                 operation=operation or "", method="DELETE", params=searchParam
             )
@@ -781,7 +810,9 @@ def register_mcp_tools(mcp: FastMCP) -> None:
             logger.debug(f"Fetching FHIR resource: {resource_type}/{resource_id}")
 
             # Fetch user's FHIR resource
-            client: AsyncFHIRClient = await get_async_fhir_client()
+            client: AsyncFHIRClient = await get_async_fhir_client(
+                require_scope=f"user/{resource_type}.read"
+            )
             resource: Dict[str, Any] = await client.get(
                 resource_type_or_resource_or_ref=resource_type, id_or_ref=resource_id
             )
