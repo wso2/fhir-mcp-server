@@ -463,7 +463,8 @@ def register_mcp_tools(mcp: FastMCP) -> None:
             Field(
                 description=(
                     "A JSON object representing the full FHIR resource body to be created. "
-                    "It must include all required elements of the resource's profile."
+                    "It must include the 'resourceType' field matching the type parameter "
+                    "and all required elements of the resource's profile."
                 )
             ),
         ],
@@ -511,7 +512,9 @@ def register_mcp_tools(mcp: FastMCP) -> None:
 
             client: AsyncFHIRClient = await get_async_fhir_client()
             bundle: dict = await client.resource(resource_type=type).execute(
-                operation=operation or "", data=payload, params=searchParam
+                operation=operation or "",
+                data={**payload, "resourceType": type},
+                params=searchParam,
             )
 
             return await extract_bundle_resources(bundle=bundle)
@@ -564,6 +567,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
             Field(
                 description=(
                     "The complete JSON representation of the FHIR resource, containing all required elements and any optional data. "
+                    "It must include the 'resourceType' field matching the type parameter. "
                     "Servers replace the existing resource with this exact content, so the payload must include all mandatory fields "
                     "defined by the resource's profile and any previous data you wish to preserve."
                 )
@@ -610,7 +614,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
             bundle: dict = await client.resource(resource_type=type, id=id).execute(
                 operation=operation or "",
                 method="PUT",
-                data={**payload, "id": id},
+                data={**payload, "resourceType": type, "id": id},
                 params=searchParam,
             )
             return await extract_bundle_resources(bundle=bundle)
