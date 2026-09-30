@@ -4,12 +4,13 @@ aiosignal==1.4.0
 annotated-doc==0.0.4
 annotated-types==0.7.0
 antlr4-python3-runtime==4.13.2
-anyio==4.13.0
+anyio==4.14.2
 attrs==26.1.0
 certifi==2026.4.22
 cffi==2.0.0
 charset-normalizer==3.4.7
 click==8.3.3
+colorama==0.4.6
 cryptography==48.0.0
 fhirpathpy==2.2.0
 fhirpy==2.2.0
@@ -36,6 +37,7 @@ python-dateutil==2.9.0.post0
 python-dotenv==1.2.2
 python-multipart==0.0.28
 pytz==2026.2
+pywin32==311; sys_platform == "win32"
 referencing==0.37.0
 requests==2.34.0
 rich==15.0.0
@@ -50,3 +52,5 @@ typing-inspection==0.4.2
 urllib3==2.7.0
 uvicorn==0.46.0
 yarl==1.23.0
+
+

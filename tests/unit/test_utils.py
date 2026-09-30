@@ -1,4 +1,4 @@
-# Copyright (c) 2025, WSO2 LLC. (https://www.wso2.com/) All Rights Reserved.
+# Copyright (c) 2025-2026, WSO2 LLC. (https://www.wso2.com/) All Rights Reserved.
 
 # WSO2 LLC. licenses this file to you under the Apache License,
 # Version 2.0 (the "License"); you may not use this file except
@@ -28,6 +28,8 @@ from fhir_mcp_server.utils import (
     get_operation_outcome,
     get_capability_statement,
     get_default_headers,
+    validate_operation,
+    validate_resource_id,
 )
 from fhir_mcp_server.oauth.types import ServerConfigs
 
@@ -335,4 +337,33 @@ class TestGetDefaultHeaders:
             "Accept": "application/fhir+json",
             "Content-Type": "application/fhir+json"
         }
+
+
+class TestPathParameterValidation:
+    @pytest.mark.parametrize("bad_id", [
+        "../../../../admin/actuator/env",
+        "%2e%2e/%2e%2e/admin",
+        "..", "...", ".", "../",
+        "https://evil.example.com/x",
+        "//evil.example.com/x",
+        "123/../../admin",
+        "foo/bar",
+        "a" * 65,
+    ])
+    async def test_validate_resource_id_rejects_traversal(self, bad_id):
+        outcome = await validate_resource_id(bad_id)
+        assert outcome is not None
+        assert outcome["issue"][0]["code"] == "invalid"
+
+    @pytest.mark.parametrize("good_id", ["123", "patient-001", "1.2.840.113619", "", "A" * 64])
+    async def test_validate_resource_id_accepts_valid(self, good_id):
+        assert await validate_resource_id(good_id) is None
+
+    @pytest.mark.parametrize("bad_op", ["../../admin", "$ever/ything", "%2e%2e/admin", "a/b"])
+    async def test_validate_operation_rejects_traversal(self, bad_op):
+        assert await validate_operation(bad_op) is not None
+
+    @pytest.mark.parametrize("good_op", ["$everything", "$expunge", "_history", "metadata", ""])
+    async def test_validate_operation_accepts_valid(self, good_op):
+        assert await validate_operation(good_op) is None
 
