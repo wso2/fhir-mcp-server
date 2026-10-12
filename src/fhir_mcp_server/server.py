@@ -444,10 +444,14 @@ def register_mcp_tools(mcp: FastMCP) -> None:
 
     @mcp.tool(
         description=(
-            "Executes a FHIR `create` interaction to persist a new resource of the specified type. "
-            "It is required to supply the full resource payload in JSON form. "
-            "Use this tool when you need to add new data (e.g., a new Patient or Observation). "
-            "Note that servers may reject resources that violate profiles or mandatory bindings."
+            "Creates a new FHIR resource on the server (FHIR `create` interaction: POST [base]/{type}). "
+            "Use it to add a record that does not exist yet, such as a new Patient, Observation or Appointment. "
+            "Do not use it to change an existing resource; use `update` for that. "
+            "The server assigns a new id on every call, so repeating a call creates duplicates; "
+            "use `search` first if the record may already exist. "
+            "On success it returns the resource as stored, including the server-assigned `id` and `meta`. "
+            "On failure it returns OperationOutcome issues whose `diagnostics` explain what to fix, "
+            "such as a missing required element or an invalid code."
         )
     )
     async def create(
@@ -462,9 +466,18 @@ def register_mcp_tools(mcp: FastMCP) -> None:
             Dict[str, Any],
             Field(
                 description=(
-                    "A JSON object representing the full FHIR resource body to be created. "
-                    "It must include all required elements of the resource's profile."
-                )
+                    "The JSON body of the new resource. Include every element the resource's profile marks as required, "
+                    "or the server rejects the request. Set `resourceType` to the same value as `type`; "
+                    "if omitted, it defaults to `type`. Leave out `id` and `meta`, which the server assigns."
+                ),
+                examples=[
+                    {
+                        "resourceType": "Patient",
+                        "name": [{"family": "Smith", "given": ["John"]}],
+                        "gender": "male",
+                        "birthDate": "1980-04-12",
+                    }
+                ],
             ),
         ],
         searchParam: Annotated[
@@ -511,7 +524,9 @@ def register_mcp_tools(mcp: FastMCP) -> None:
 
             client: AsyncFHIRClient = await get_async_fhir_client()
             bundle: dict = await client.resource(resource_type=type).execute(
-                operation=operation or "", data=payload, params=searchParam
+                operation=operation or "",
+                data={"resourceType": type, **payload},
+                params=searchParam,
             )
 
             return await extract_bundle_resources(bundle=bundle)
@@ -539,12 +554,13 @@ def register_mcp_tools(mcp: FastMCP) -> None:
 
     @mcp.tool(
         description=(
-            "Performs a FHIR `update` interaction by replacing an existing resource instance's content with the provided payload. "
-            "Use it when you need to overwrite a resource's data in its entirety, such as correcting or completing a record, "
-            "and you already know the resource's logical id. "
-            "Optionally, you can include searchParam for conditional updates (e.g., only update if the resource matches certain criteria) "
-            "or specify a custom operation (e.g., `$validate` to run validation before updating) "
-            "The tool returns the updated resource or an OperationOutcome detailing any errors."
+            "Replaces the full content of an existing FHIR resource (FHIR `update` interaction: PUT [base]/{type}/{id}). "
+            "Use it to correct or complete a record whose logical id you already know. "
+            "Elements left out of the payload are removed from the stored resource, not kept, "
+            "so first get the current version with `read`, change what you need, and send the whole resource back. "
+            "Do not use it to add new records; use `create` for that. "
+            "On success it returns the resource as stored, with an updated `meta.versionId` and `meta.lastUpdated`. "
+            "On failure it returns OperationOutcome issues whose `diagnostics` explain what to fix."
         )
     )
     async def update(
@@ -563,10 +579,20 @@ def register_mcp_tools(mcp: FastMCP) -> None:
             Dict[str, Any],
             Field(
                 description=(
-                    "The complete JSON representation of the FHIR resource, containing all required elements and any optional data. "
-                    "Servers replace the existing resource with this exact content, so the payload must include all mandatory fields "
-                    "defined by the resource's profile and any previous data you wish to preserve."
-                )
+                    "The complete new content of the resource. It replaces the stored version entirely, "
+                    "so include every required element and all existing data you want to keep. "
+                    "Set `resourceType` to the same value as `type`; if omitted, it defaults to `type`. "
+                    "The body `id` is always set to the `id` argument, overriding any value given here."
+                ),
+                examples=[
+                    {
+                        "resourceType": "Organization",
+                        "id": "org-1001",
+                        "active": True,
+                        "name": "Boston General Hospital",
+                        "telecom": [{"system": "phone", "value": "+1-617-555-0100"}],
+                    }
+                ],
             ),
         ],
         searchParam: Annotated[
@@ -610,7 +636,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
             bundle: dict = await client.resource(resource_type=type, id=id).execute(
                 operation=operation or "",
                 method="PUT",
-                data={**payload, "id": id},
+                data={"resourceType": type, **payload, "id": id},
                 params=searchParam,
             )
             return await extract_bundle_resources(bundle=bundle)
