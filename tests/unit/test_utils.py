@@ -1,3 +1,4 @@
+from fhir_mcp_server.interactions import FhirTransportError
 # Copyright (c) 2025-2026, WSO2 LLC. (https://www.wso2.com/) All Rights Reserved.
 
 # WSO2 LLC. licenses this file to you under the Apache License,
@@ -274,7 +275,7 @@ class TestGetCapabilityStatement:
             assert result == expected_metadata
             mock_client.get.assert_called_once_with(
                 url=metadata_url, 
-                headers=get_default_headers()
+                headers=get_default_headers(), timeout=30, follow_redirects=False
             )
             mock_response.raise_for_status.assert_called_once()
 
@@ -290,7 +291,7 @@ class TestGetCapabilityStatement:
             mock_client.get.return_value = mock_response
             mock_client_context.return_value.__aenter__.return_value = mock_client
             
-            with pytest.raises(ValueError, match="Unable to fetch FHIR metadata"):
+            with pytest.raises(FhirTransportError, match="Unable to fetch FHIR metadata"):
                 await get_capability_statement(metadata_url)
 
     @pytest.mark.asyncio
@@ -305,7 +306,7 @@ class TestGetCapabilityStatement:
             mock_client.get.return_value = mock_response
             mock_client_context.return_value.__aenter__.return_value = mock_client
             
-            with pytest.raises(ValueError, match="Unable to fetch FHIR metadata"):
+            with pytest.raises(FhirTransportError, match="Unable to fetch FHIR metadata"):
                 await get_capability_statement(metadata_url)
 
 
