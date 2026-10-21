@@ -19,7 +19,7 @@ import json
 import logging
 
 from typing import Any, Dict
-from pydantic import AnyHttpUrl, BaseModel
+from pydantic import AnyHttpUrl, BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
@@ -41,6 +41,10 @@ class ServerConfigs(BaseSettings):
     mcp_port: int = 8000
     mcp_server_url: str | None = None
     mcp_request_timeout: int = 30  # in secs
+
+    mcp_enable_write_tools: bool = False
+    mcp_max_interaction_request_bytes: int = Field(default=1048576, gt=0)
+    mcp_max_interaction_response_bytes: int = Field(default=8388608, gt=0)
 
     # FHIR settings
     server_client_id: str = ""

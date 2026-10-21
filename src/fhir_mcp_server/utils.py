@@ -21,6 +21,7 @@ import re
 from pydantic import ValidationError
 
 from fhir_mcp_server.oauth import ServerConfigs
+from fhir_mcp_server.interactions import FhirTransportError
 
 from typing import Any, Dict, List, Optional
 from fhirpy import AsyncFHIRClient
@@ -183,23 +184,20 @@ async def get_operation_outcome(
     }
 
 
-async def get_capability_statement(metadata_url: str) -> Dict[str, Any]:
-    """
-    Discover CapabilityStatement from server's metadata endpoint.
-    """
+async def get_capability_statement(metadata_url: str, access_token: str | None = None,
+                                   timeout: float = 30) -> Dict[str, Any]:
+    """Discover metadata with caller credentials, bounded timeout and no redirects."""
+    headers = get_default_headers()
+    if access_token:
+        headers["Authorization"] = "Bearer " + access_token
     try:
-        logger.debug(f"Fetching CapabilityStatement from {metadata_url}")
         async with create_mcp_http_client() as client:
-            response = await client.get(url=metadata_url, headers=get_default_headers())
+            response = await client.get(url=metadata_url, headers=headers,
+                                        timeout=timeout, follow_redirects=False)
             response.raise_for_status()
-            metadata_json = response.json()
-            logger.debug(f"OAuth metadata discovered: {metadata_json}")
-            return metadata_json
-    except Exception as ex:
-        logger.exception(
-            "Unable to invoke the FHIR metadata endpoint. Caused by, ", exc_info=ex
-        )
-        raise ValueError("Unable to fetch FHIR metadata")
+            return response.json()
+    except Exception:
+        raise FhirTransportError("network", "Unable to fetch FHIR metadata.", uncertain=False) from None
 
 
 def get_default_headers() -> Dict[str, str]:
