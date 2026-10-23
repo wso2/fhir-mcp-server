@@ -1,4 +1,4 @@
-# Separate project name so this stack does not replace the HAPI stack in docker-compose.yml.
+# Separate project name so this stack does not replace the HAPI stack in docker-compose.hapi-fhir-server.yml.
 name: fhir-mcp-wso2
 
 services:
