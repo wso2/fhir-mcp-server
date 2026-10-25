@@ -19,10 +19,12 @@ pytestmark = pytest.mark.skipif(
 
 
 def transaction(entries, kind="transaction"):
+    """Build a transaction or batch request Bundle from synthetic test entries."""
     return {"resourceType": "Bundle", "type": kind, "entry": entries}
 
 
 def put(resource):
+    """Build an instance PUT entry using the synthetic resource type and ID."""
     return {
         "request": {
             "method": "PUT",
@@ -33,6 +35,7 @@ def put(resource):
 
 
 def parameters_patch(resource_id, value):
+    """Build a FHIRPath Parameters patch that replaces a synthetic Patient active flag."""
     return {
         "request": {"method": "PATCH", "url": "Patient/" + resource_id},
         "resource": {
@@ -52,6 +55,7 @@ def parameters_patch(resource_id, value):
 
 
 async def test_aidbox_bundle_patch_acceptance():
+    """Verify live MCP writes with a restricted sandbox identity and clean up created resources."""
     base = os.environ.get("FHIR_TEST_AIDBOX_URL", "").rstrip("/")
     token = os.environ.get("FHIR_TEST_AIDBOX_TOKEN", "")
     if not base or not token:
@@ -122,6 +126,9 @@ async def test_aidbox_bundle_patch_acceptance():
                         async def execute(
                             entries, kind="transaction", prefer="representation"
                         ):
+                            """Call execute_bundle through MCP and verify text and structured
+                            results agree.
+                            """
                             result = await session.call_tool(
                                 "execute_bundle",
                                 {
@@ -135,6 +142,9 @@ async def test_aidbox_bundle_patch_acceptance():
                             return result, result.structuredContent
 
                         async def read_patient(pid=patient_id):
+                            """Read the synthetic Patient directly to independently verify MCP
+                            write effects.
+                            """
                             return await http.get(base + "/Patient/" + pid)
 
                         patient = {

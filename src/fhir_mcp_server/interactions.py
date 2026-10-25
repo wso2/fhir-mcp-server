@@ -20,6 +20,7 @@ BAD_PERCENT = re.compile(r"%(?![0-9a-fA-F]{2})")
 
 class FhirInputError(Exception):
     def __init__(self, message: str, code: str = "invalid"):
+        """Attach a FHIR issue code to a validation failure raised before dispatch."""
         super().__init__(message)
         self.code = code
 
@@ -38,6 +39,7 @@ class FhirTransportError(Exception):
         headers: dict[str, str] | None = None,
         uncertain: bool = True,
     ):
+        """Record a sanitized failure category, observed response and dispatch uncertainty."""
         super().__init__(message)
         self.kind = kind
         self.status = status
@@ -78,6 +80,9 @@ class FhirInteractionResult(BaseModel):
     error: InteractionError | None = None
 
     def as_mcp(self) -> CallToolResult:
+        """Return matching text and structured results, marking failed or uncertain outcomes as
+        errors.
+        """
         data = self.model_dump(mode="json")
         return CallToolResult(
             content=[
@@ -91,6 +96,7 @@ class FhirInteractionResult(BaseModel):
 def local_failure(
     interaction: str | None, kind: str, message: str, code: str = "invalid"
 ) -> FhirInteractionResult:
+    """Build a pre-dispatch failure with a local OperationOutcome and no HTTP status."""
     return FhirInteractionResult(
         interaction=interaction,
         status="failure",
@@ -106,6 +112,7 @@ def local_failure(
 
 
 def serialize_request(body: Any, limit: int) -> bytes:
+    """Encode finite JSON as UTF-8 and enforce the byte limit before dispatch."""
     try:
         encoded = json.dumps(
             body, ensure_ascii=False, allow_nan=False, separators=(",", ":")
@@ -118,6 +125,7 @@ def serialize_request(body: Any, limit: int) -> bytes:
 
 
 def validate_instance(resource_type: str, resource_id: str) -> None:
+    """Require a safe resource type and a nonempty instance ID without path segments."""
     if not isinstance(resource_type, str) or not RESOURCE_TYPE.fullmatch(resource_type):
         raise FhirInputError("Invalid FHIR resource type.")
     if not isinstance(resource_id, str):
@@ -132,11 +140,13 @@ def validate_instance(resource_type: str, resource_id: str) -> None:
 
 
 def validate_prefer(prefer: str) -> None:
+    """Accept only the supported minimal and representation return preferences."""
     if prefer not in ("minimal", "representation"):
         raise FhirInputError("Prefer must be minimal or representation.")
 
 
 def validate_if_match(value: str | None) -> None:
+    """Accept one weak, quoted or bare version ETag without rewriting its value."""
     if value is None:
         return
     if not isinstance(value, str):
@@ -164,6 +174,7 @@ def validate_if_match(value: str | None) -> None:
 
 
 def validate_pointer(value: Any, member: str = "path") -> None:
+    """Check JSON Pointer syntax, including escapes, for a named patch member."""
     if not isinstance(value, str):
         raise FhirInputError(f"Patch '{member}' must be a JSON Pointer string.")
     if (value and not value.startswith("/")) or re.search(r"~(?![01])", value):
@@ -174,6 +185,7 @@ def validate_pointer(value: Any, member: str = "path") -> None:
 
 
 def validate_patch(payload: Any) -> None:
+    """Check operation count and JSON Patch members without evaluating resource paths."""
     if not isinstance(payload, list):
         raise FhirInputError("JSON Patch must be an array of operation objects.")
     if len(payload) > MAX_PATCH_OPERATIONS:
@@ -204,11 +216,17 @@ def validate_patch(payload: Any) -> None:
 
 
 def validate_query(query: str) -> None:
+    """Reject empty criteria, controls, fragments and malformed percent escapes."""
     if not query or CONTROL.search(query) or BAD_PERCENT.search(query) or "#" in query:
         raise FhirInputError("Invalid or empty query criteria.")
 
 
 def validate_bundle_request_url(value: Any) -> tuple[str, str, str | None, bool]:
+    """Validate a type or instance route and return its normalized path and query flag.
+
+    Only type routes may carry queries. Query text is preserved verbatim; absolute URLs,
+    traversal, operations and history routes are rejected.
+    """
     if (
         not isinstance(value, str)
         or not value
@@ -237,6 +255,7 @@ def validate_bundle_request_url(value: Any) -> tuple[str, str, str | None, bool]
 
 
 def validate_parameters(resource: Any) -> None:
+    """Check the Bundle PATCH Parameters envelope; defer FHIRPath semantics to the server."""
     if not isinstance(resource, dict) or resource.get("resourceType") != "Parameters":
         raise FhirInputError(
             "Bundle PATCH requires FHIRPath Parameters; Binary and other formats are not supported.",
@@ -260,6 +279,7 @@ def validate_parameters(resource: Any) -> None:
 
 
 def reference_values(value: Any):
+    """Yield only string values under reference keys in nested dictionaries and lists."""
     if isinstance(value, dict):
         for key, child in value.items():
             if key == "reference" and isinstance(child, str):
@@ -271,6 +291,12 @@ def reference_values(value: Any):
 
 
 def validate_bundle(bundle: Any) -> dict[str, Any]:
+    """Return a validated copy of a transaction or batch Bundle.
+
+    Normalize entry routes while preserving resource data and preconditions. Reject
+    unsupported methods, mismatched bodies and cross-entry POST URN dependencies in batches;
+    leave full FHIR resource validation to the server.
+    """
     if not isinstance(bundle, dict) or bundle.get("resourceType") != "Bundle":
         raise FhirInputError(
             "Expected a FHIR Bundle object with resourceType 'Bundle'."
@@ -411,6 +437,12 @@ def classify_response(
     resource_type: str | None = None,
     resource_id: str | None = None,
 ) -> FhirInteractionResult:
+    """Classify HTTP and per-entry outcomes while preserving the complete response.
+
+    A malformed success response is unknown, not proof of rollback. Batch failures retain
+    successful entries; inconsistent transactions are protocol errors. Accepted asynchronous
+    requests remain pending.
+    """
     result = FhirInteractionResult(
         interaction=interaction,
         httpStatus=http.status,
@@ -420,6 +452,7 @@ def classify_response(
     )
 
     def fail(kind: str, message: str, status: str = "unknown") -> FhirInteractionResult:
+        """Attach a classification error to the result without dropping the upstream response."""
         result.status = status
         result.error = InteractionError(kind=kind, message=message)
         return result

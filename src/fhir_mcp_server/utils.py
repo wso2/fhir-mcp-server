@@ -15,6 +15,7 @@
 # under the License.
 
 import aiohttp
+import httpx
 import logging
 import re
 
@@ -51,6 +52,7 @@ async def create_async_fhir_client(
 
 
 async def extract_bundle_resources(bundle: Dict[str, Any]) -> Dict[str, Any]:
+    """Flatten resource entries for legacy tools, discarding Bundle response metadata."""
     if bundle and "entry" in bundle and isinstance(bundle["entry"], list):
         logger.debug(f"found {len(bundle['entry'])} entries for type '{type}'")
         return {
@@ -67,6 +69,7 @@ async def extract_bundle_resources(bundle: Dict[str, Any]) -> Dict[str, Any]:
 def trim_resource_capabilities(
     capabilities: List[Dict[str, Any]],
 ) -> List[Dict[str, Optional[str]]]:
+    """Keep only name and documentation fields from advertised capability entries."""
     logger.debug(
         f"trim_resource_capabilities called with {len(capabilities)} capabilities."
     )
@@ -85,18 +88,21 @@ def trim_resource_capabilities(
 
 
 async def get_operation_outcome_exception() -> dict:
+    """Return a generic internal-error outcome without exposing exception details."""
     return await get_operation_outcome(
         code="exception", diagnostics="An unexpected internal error has occurred."
     )
 
 
 async def get_operation_outcome_required_error(element: str = "") -> dict:
+    """Return an outcome identifying a missing required element."""
     return await get_operation_outcome(
         code="required", diagnostics=f"A required element {element} is missing."
     )
 
 
 async def validate_resource_type(resource_type: str) -> dict | None:
+    """Return an invalid-input outcome unless the resource type is alphabetic and bounded."""
     try:
         if not re.fullmatch(r"[A-Za-z]{1,64}", resource_type):
             logger.error(
@@ -172,6 +178,7 @@ async def validate_inputs(
 async def get_operation_outcome(
     code: str, diagnostics: str, severity: str = "error"
 ) -> dict:
+    """Build a FHIR OperationOutcome containing one issue with the supplied diagnostics."""
     return {
         "resourceType": "OperationOutcome",
         "issue": [
@@ -186,7 +193,12 @@ async def get_operation_outcome(
 
 async def get_capability_statement(metadata_url: str, access_token: str | None = None,
                                    timeout: float = 30) -> Dict[str, Any]:
-    """Discover metadata with caller credentials, bounded timeout and no redirects."""
+    """Fetch a metadata object with credentials, a timeout and no redirects.
+
+    Raise FhirTransportError with the observed status for HTTP rejection or invalid JSON,
+    and distinguish timeouts from other connection failures. Exception messages omit URLs,
+    credentials and upstream response bodies.
+    """
     headers = get_default_headers()
     if access_token:
         headers["Authorization"] = "Bearer " + access_token
@@ -195,12 +207,33 @@ async def get_capability_statement(metadata_url: str, access_token: str | None =
             response = await client.get(url=metadata_url, headers=headers,
                                         timeout=timeout, follow_redirects=False)
             response.raise_for_status()
-            return response.json()
+            try:
+                metadata = response.json()
+                if not isinstance(metadata, dict):
+                    raise ValueError("Metadata must be an object")
+            except ValueError:
+                raise FhirTransportError(
+                    "protocol", "Unable to fetch FHIR metadata: invalid JSON object.",
+                    status=response.status_code, uncertain=False,
+                ) from None
+            return metadata
+    except FhirTransportError:
+        raise
+    except httpx.HTTPStatusError as error:
+        raise FhirTransportError(
+            "upstream-http", "Unable to fetch FHIR metadata: HTTP rejection.",
+            status=error.response.status_code, uncertain=False,
+        ) from None
+    except httpx.TimeoutException:
+        raise FhirTransportError(
+            "timeout", "Unable to fetch FHIR metadata: request timed out.", uncertain=False,
+        ) from None
     except Exception:
         raise FhirTransportError("network", "Unable to fetch FHIR metadata.", uncertain=False) from None
 
 
 def get_default_headers() -> Dict[str, str]:
+    """Return a fresh mapping requesting and sending FHIR JSON."""
     return {"Accept": "application/fhir+json", "Content-Type": "application/fhir+json"}
 
 

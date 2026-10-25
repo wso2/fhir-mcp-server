@@ -13,6 +13,9 @@ from tests.e2e.conftest import build_mcp_test_environment
 def test_e2e_subprocess_does_not_load_deployment_credentials(
     tmp_path, monkeypatch, inherited_credentials
 ):
+    """Prove explicit empty settings override credentials in both the environment and dotenv
+    file.
+    """
     credential_names = (
         "FHIR_SERVER_ACCESS_TOKEN", "FHIR_SERVER_CLIENT_ID",
         "FHIR_SERVER_CLIENT_SECRET", "FHIR_SERVER_SCOPES",

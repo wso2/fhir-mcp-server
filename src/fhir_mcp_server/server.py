@@ -108,6 +108,7 @@ async def resolve_fhir_access_token() -> str | None:
 
 
 async def get_async_fhir_client() -> AsyncFHIRClient:
+    """Create a fhirpy client using the current request identity and configured timeout."""
     return await create_async_fhir_client(
         config=configs, access_token=await resolve_fhir_access_token(),
         extra_headers=get_default_headers(),
@@ -185,7 +186,9 @@ def register_mcp_tools(mcp: FastMCP) -> None:
     logger.debug("Registering MCP tools.")
 
     def write_tool(**kwargs):
+        """Register a mutation tool only when the deployment explicitly enables writes."""
         def decorate(function):
+            """Keep the handler callable while conditionally exposing it through MCP."""
             if configs.mcp_enable_write_tools:
                 return mcp.tool(**kwargs)(function)
             return function
@@ -227,6 +230,11 @@ def register_mcp_tools(mcp: FastMCP) -> None:
             )
         ),
     ]:
+        """Discover resource or compact system capabilities using the current identity.
+
+        Full system operation definitions require explicit opt-in. Discovery is advisory;
+        sanitized transport diagnostics preserve failure kind and status.
+        """
         try:
             if type and (outcome := await validate_resource_type(type)):
                 return outcome
@@ -266,6 +274,13 @@ def register_mcp_tools(mcp: FastMCP) -> None:
             return await get_operation_outcome(code="not-supported", diagnostics="Resource type is not advertised by the server.")
         except FhirAuthenticationError:
             return await get_operation_outcome(code="forbidden", diagnostics="User is not authenticated.")
+        except FhirTransportError as error:
+            logger.warning("FHIR capability discovery failed: kind=%s status=%s", error.kind, error.status)
+            status_detail = f", HTTP {error.status}" if error.status is not None else ""
+            return await get_operation_outcome(
+                code="exception",
+                diagnostics=f"FHIR capability discovery failed ({error.kind}{status_detail}).",
+            )
         except Exception:
             logger.warning("FHIR capability discovery failed.")
             return await get_operation_outcome_exception()
@@ -318,6 +333,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
             description="A dictionary containing the full FHIR resource instance matching the search criteria."
         ),
     ]:
+        """Search a resource type with repeated parameters and optional FHIRPath result filters."""
         try:
             logger.debug(f"Invoked with type='{type}' and searchParam={searchParam}")
             if not type:
@@ -413,6 +429,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
             description="A dictionary containing the single FHIR resource instance of the requested type and id."
         ),
     ]:
+        """Read a resource or invoke its configured GET operation, then filter returned fields."""
         try:
             logger.debug(
                 f"Invoked with type='{type}', id={id}, searchParam={searchParam}, and operation={operation}"
@@ -532,6 +549,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
             )
         ),
     ]:
+        """Create a non-Bundle resource after checking the write gate and validating path inputs."""
         if not configs.mcp_enable_write_tools:
             return await get_operation_outcome(code="forbidden", diagnostics="Write tools are disabled.")
         if type == "Bundle" or payload.get("resourceType") == "Bundle":
@@ -649,6 +667,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
         Dict[str, Any],
         Field(description="A dictionary containing the updated FHIR resource"),
     ]:
+        """Replace a resource through fhirpy after checking the write gate and path inputs."""
         if not configs.mcp_enable_write_tools:
             return await get_operation_outcome(code="forbidden", diagnostics="Write tools are disabled.")
         try:
@@ -742,6 +761,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
             description="A dictionary containing the confirmation of deletion or details on why deletion failed."
         ),
     ]:
+        """Delete through fhirpy after checking the write gate and validating path inputs."""
         if not configs.mcp_enable_write_tools:
             return await get_operation_outcome(code="forbidden", diagnostics="Write tools are disabled.")
         try:
@@ -796,6 +816,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
 
     async def run_interaction(interaction, body, relative_path, *, prefer, if_match=None,
                               bundle=None, resource_type=None, resource_id=None, count=0):
+        """Resolve credentials, send one mutation and classify its preserved HTTP response."""
         token = await resolve_fhir_access_token()
         response = await send_fhir_request(
             configs, token, "PATCH" if interaction == "patch" else "POST", relative_path, body,
@@ -806,6 +827,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                                  resource_type=resource_type, resource_id=resource_id).as_mcp()
 
     def interaction_error(interaction, error):
+        """Translate validation, authentication and transport exceptions into MCP results."""
         if isinstance(error, FhirInputError):
             return local_failure(interaction, "validation", str(error), error.code).as_mcp()
         if isinstance(error, FhirAuthenticationError):
@@ -827,6 +849,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
     async def execute_bundle(
         bundle: dict[str, Any], prefer: Literal["minimal", "representation"] = "representation",
     ) -> Annotated[CallToolResult, FhirInteractionResult]:
+        """Validate and submit one transaction or batch Bundle without automatic replay."""
         interaction = bundle.get("type") if bundle.get("type") in ("transaction", "batch") else None
         if not configs.mcp_enable_write_tools:
             return local_failure(interaction, "authentication", "Write tools are disabled.", "forbidden").as_mcp()
@@ -853,6 +876,9 @@ def register_mcp_tools(mcp: FastMCP) -> None:
         type: str, id: str, payload: list[dict[str, Any]], if_match: str | None = None,
         prefer: Literal["minimal", "representation"] = "representation",
     ) -> Annotated[CallToolResult, FhirInteractionResult]:
+        """Apply bounded JSON Patch operations to one instance with an optional version
+        precondition.
+        """
         if not configs.mcp_enable_write_tools:
             return local_failure("patch", "authentication", "Write tools are disabled.", "forbidden").as_mcp()
         try:
@@ -878,6 +904,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
             description="A dictionary containing the authenticated user's demographic information such as 'id', 'name', and 'birthDate'."
         ),
     ]:
+        """Resolve the authenticated token's FHIR user profile, returning empty when unavailable."""
         try:
             logger.debug("Retrieving authenticated user's profile.")
 

@@ -79,6 +79,7 @@ class RecordingFhirServer:
     """
 
     def __init__(self) -> None:
+        """Bind an ephemeral loopback server with request recording and queued responses."""
         self.requests: List[Tuple[str, str]] = []
         self.authorization_seen: list[bool] = []
         self.records: list[dict] = []
@@ -87,6 +88,7 @@ class RecordingFhirServer:
 
         class Handler(BaseHTTPRequestHandler):
             def _handle(self) -> None:
+                """Record a request and serve the next queued status, body, delay or disconnect."""
                 recorder.requests.append((self.command, self.path))
                 recorder.authorization_seen.append("Authorization" in self.headers)
                 length = int(self.headers.get("Content-Length", "0"))
@@ -116,6 +118,7 @@ class RecordingFhirServer:
             do_GET = do_POST = do_PUT = do_DELETE = do_PATCH = _handle
 
             def log_message(self, format: str, *args: Any) -> None:
+                """Send stub access messages to debug logging instead of stderr."""
                 logger.debug("[FHIR STUB] " + format, *args)
 
         # Port 0 lets the OS pick a free port. 127.0.0.1 rather than
@@ -125,12 +128,17 @@ class RecordingFhirServer:
         self._thread = threading.Thread(target=self._httpd.serve_forever, daemon=True)
 
     def queue(self, status=200, body=b"", headers=None, delay=0):
+        """Enqueue a response; status zero simulates disconnect and delay simulates slow
+        delivery.
+        """
         self.responses.append((status, dict(headers or {}), body, delay))
 
     def start(self) -> None:
+        """Start the loopback server on its background thread."""
         self._thread.start()
 
     def stop(self) -> None:
+        """Stop serving and release the loopback socket."""
         self._httpd.shutdown()
         self._httpd.server_close()
 
@@ -171,6 +179,7 @@ async def run_mcp_server(fhir_base_url: str, *, settings: dict[str, str] | None 
 
     # Start a background thread to stream server output
     def stream_output():
+        """Drain subprocess output in a background thread to prevent pipe blockage."""
         if process.stdout is not None:
             for line in iter(process.stdout.readline, ""):
                 logger.debug(f"{line.rstrip()}")

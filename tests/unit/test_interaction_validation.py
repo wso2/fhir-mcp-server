@@ -19,6 +19,7 @@ from fhir_mcp_server.fhir_http import FhirHttpResponse, request_url
 def bundle(
     method="GET", url="Patient/123", resource=None, kind="transaction", **request
 ):
+    """Build a single-entry Bundle for route, precondition and response-classification tests."""
     entry = {"request": {"method": method, "url": url, **request}}
     if resource is not None:
         entry["resource"] = resource
@@ -52,6 +53,7 @@ def bundle(
     ],
 )
 def test_url_boundary(url):
+    """Reject absolute URLs, traversal, unsupported routes and malformed query syntax."""
     with pytest.raises(FhirInputError):
         validate_bundle_request_url(url)
 
@@ -67,6 +69,7 @@ def test_url_boundary(url):
     ],
 )
 def test_queries_preserved(url):
+    """Preserve complex search criteria while stripping only the allowed leading slash."""
     assert validate_bundle_request_url(url)[0] == url.lstrip("/")
 
 
@@ -83,11 +86,13 @@ def test_queries_preserved(url):
     ],
 )
 def test_invalid_configured_base(base):
+    """Reject non-HTTP, credential-bearing or otherwise ambiguous configured base URLs."""
     with pytest.raises(FhirInputError):
         request_url(base, "")
 
 
 def test_exact_base_and_prefix():
+    """Preserve tenant prefixes and post Bundles to the exact normalized FHIR base."""
     assert request_url("https://host/tenant/fhir/", "") == "https://host/tenant/fhir"
     assert (
         request_url("https://host/tenant/fhir", "Patient/123")
@@ -109,6 +114,7 @@ def test_exact_base_and_prefix():
     ],
 )
 def test_supported_routes(method, url, resource):
+    """Accept the documented method, route and resource combinations without altering them."""
     value = bundle(method, url, resource)
     assert validate_bundle(value) == value
 
@@ -129,11 +135,13 @@ def test_supported_routes(method, url, resource):
     ],
 )
 def test_rejected_routes(method, url, resource):
+    """Reject unsupported methods, broad writes and bodies that conflict with their routes."""
     with pytest.raises(FhirInputError):
         validate_bundle(bundle(method, url, resource))
 
 
 def test_bundle_preservation_and_normalization():
+    """Normalize copied request URLs without mutating input or losing resource values."""
     value = bundle(
         "POST",
         "/Patient",
@@ -152,6 +160,7 @@ def test_bundle_preservation_and_normalization():
 
 
 def test_batch_reference_check_is_exact_and_only_reference_values():
+    """Reject only cross-entry POST URN references, allowing unrelated URLs and self-references."""
     value = bundle("POST", "Patient", {"resourceType": "Patient"}, "batch")
     value["entry"][0]["fullUrl"] = "urn:uuid:example"
     second = {
@@ -180,6 +189,9 @@ def test_batch_reference_check_is_exact_and_only_reference_values():
 
 @pytest.mark.parametrize("value", [None, False, 0, "", [], {}, "é"])
 def test_patch_values_and_extra_members_preserved(value):
+    """Preserve falsey values, extra members and escaped pointers across all JSON Patch
+    operations.
+    """
     payload = [
         {"op": "add", "path": "/a~1b/~0", "value": value, "extra": 1},
         {"op": "copy", "path": "", "from": "/a"},
@@ -206,11 +218,15 @@ def test_patch_values_and_extra_members_preserved(value):
     ],
 )
 def test_invalid_patch(payload):
+    """Reject unsupported operations, missing members, invalid pointers and excessive operation
+    counts.
+    """
     with pytest.raises(FhirInputError):
         validate_patch(payload)
 
 
 def test_limits_and_headers():
+    """Enforce byte and entry limits, finite JSON, nonempty IDs and safe version preconditions."""
     raw = serialize_request({"value": "é"}, 100)
     assert len(raw) > len(raw.decode())
     assert serialize_request({"value": "é"}, len(raw)) == raw
@@ -244,6 +260,7 @@ def test_limits_and_headers():
     ],
 )
 def test_request_preconditions_rejected(preconditions):
+    """Reject method-incompatible preconditions, invalid instants and header control characters."""
     with pytest.raises(FhirInputError):
         validate_bundle(bundle(**preconditions))
 
@@ -263,6 +280,7 @@ def test_request_preconditions_rejected(preconditions):
     ],
 )
 def test_bundle_classification(kind, statuses, expected, error):
+    """Classify mixed, pending and malformed entry statuses while preserving the entire response."""
     request = bundle(kind=kind)
     request["entry"] *= 2
     response = {
@@ -288,6 +306,7 @@ def test_bundle_classification(kind, statuses, expected, error):
 
 
 def test_conditional_304_and_empty_bundle():
+    """Accept conditional not-modified entries and valid empty transaction responses."""
     request = bundle(ifNoneMatch='W/"7"')
     response = {
         "resourceType": "Bundle",
@@ -334,6 +353,7 @@ def test_conditional_304_and_empty_bundle():
     ],
 )
 def test_patch_outcomes(status, body, is_json, has_body, expected):
+    """Classify PATCH statuses and resource bodies without dropping observed status or ETag."""
     result = classify_response(
         "patch",
         FhirHttpResponse(status, {"etag": 'W/"8"'}, body, is_json, has_body),
@@ -346,6 +366,9 @@ def test_patch_outcomes(status, body, is_json, has_body, expected):
 
 
 def test_parameters_envelope_preserves_nested_values_and_defers_semantics():
+    """Validate Parameters structure while preserving nested values and deferring FHIRPath
+    evaluation.
+    """
     resource = {
         "resourceType": "Parameters",
         "parameter": [
@@ -382,6 +405,7 @@ def test_parameters_envelope_preserves_nested_values_and_defers_semantics():
 
 
 def test_fullurl_and_entry_envelopes():
+    """Reject malformed or versioned fullUrls and invalid Bundle entry envelopes."""
     for full_url in [
         "Patient/123",
         "https://example.org/Patient/123/_history/2",
@@ -411,6 +435,7 @@ def test_fullurl_and_entry_envelopes():
 
 
 def test_if_none_exist_is_criteria_and_preconditions_preserved():
+    """Preserve conditional-create criteria while rejecting URLs and malformed percent escapes."""
     value = bundle(
         "POST",
         "Patient",
@@ -441,6 +466,7 @@ def test_if_none_exist_is_criteria_and_preconditions_preserved():
     ],
 )
 def test_malformed_success_is_unknown_not_an_exception(body):
+    """Return a protocol-unknown result for malformed success bodies instead of crashing."""
     result = classify_response(
         "transaction", FhirHttpResponse(200, {}, body, True, True), bundle=bundle()
     )
@@ -457,6 +483,7 @@ def test_malformed_success_is_unknown_not_an_exception(body):
     ],
 )
 def test_resource_id_diagnostics(value, message):
+    """Distinguish absent, malformed and non-string resource IDs in validation messages."""
     with pytest.raises(FhirInputError) as caught:
         validate_instance("Patient", value)
     assert message in str(caught.value)
@@ -473,6 +500,7 @@ def test_resource_id_diagnostics(value, message):
     ],
 )
 def test_if_match_diagnostics(value, message):
+    """Distinguish empty, wildcard, control-containing and malformed If-Match values."""
     with pytest.raises(FhirInputError) as caught:
         validate_if_match(value)
     assert message in str(caught.value)

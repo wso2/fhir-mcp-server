@@ -35,6 +35,7 @@ class FhirHttpResponse:
 
 
 def request_url(base: str, relative_path: str) -> str:
+    """Validate the configured HTTP(S) base and append an already validated resource path."""
     try:
         parts = urlsplit(base)
         if (
@@ -69,6 +70,11 @@ async def send_fhir_request(
     interaction: str = "patch",
     count: int = 0,
 ) -> FhirHttpResponse:
+    """Send one bounded mutation request without redirects or retries.
+
+    Return the observed status, allowlisted headers and parsed JSON body. Failures after
+    dispatch are uncertain because the server may have committed.
+    """
     url = request_url(config.server_base_url, relative_path)
     headers = {
         "Accept": "application/fhir+json",
@@ -115,6 +121,9 @@ async def send_fhir_request(
                     try:
 
                         def reject_constant(value):
+                            """Reject nonfinite JSON constants instead of treating the response
+                            as valid JSON.
+                            """
                             raise ValueError("Nonfinite JSON constant")
 
                         parsed = json.loads(chunks, parse_constant=reject_constant)

@@ -15,6 +15,7 @@ AIDBOX_URL = "http://127.0.0.1:8080"
 
 
 def main() -> None:
+    """Renew the local scoped Aidbox token after checking allowed and denied access."""
     settings = dotenv_values(ENV_FILE, interpolate=False)
     credentials = dotenv_values(CREDENTIAL_FILE, interpolate=False)
     if settings.get("FHIR_SERVER_BASE_URL", "").rstrip("/") != AIDBOX_URL + "/fhir":

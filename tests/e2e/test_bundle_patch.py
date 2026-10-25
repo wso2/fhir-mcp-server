@@ -12,6 +12,7 @@ from tests.e2e.conftest import RecordingFhirServer, run_mcp_server
 
 @asynccontextmanager
 async def session_for(stub, enabled=True, **settings):
+    """Yield an initialized MCP session backed by an isolated loopback FHIR stub."""
     settings = {"FHIR_MCP_ENABLE_WRITE_TOOLS": str(enabled), **settings}
     async with run_mcp_server(stub.base_url + "/tenant/fhir", settings=settings):
         async with streamable_http_client("http://localhost:8001/mcp/") as (
@@ -26,6 +27,7 @@ async def session_for(stub, enabled=True, **settings):
 
 @pytest.fixture
 def stub():
+    """Run a disposable loopback recorder and close it after the test."""
     server = RecordingFhirServer()
     server.start()
     try:
@@ -35,11 +37,13 @@ def stub():
 
 
 def structured(result):
+    """Assert text and structured MCP payloads agree, then return the structured result."""
     assert result.structuredContent == json.loads(result.content[0].text)
     return result.structuredContent
 
 
 async def test_write_gate_and_protocol_schema(stub):
+    """Verify tool registration, schema defaults and annotations with writes enabled or disabled."""
     writes = {"create", "update", "delete", "execute_bundle", "patch"}
     async with session_for(stub, enabled=False) as session:
         listed = await session.list_tools()
@@ -66,6 +70,9 @@ async def test_write_gate_and_protocol_schema(stub):
 
 
 async def test_bundle_single_post_preserves_full_response_and_batch_failure(stub):
+    """Verify one Bundle POST retains nested results, repeated queries and partial failure
+    details.
+    """
     request = {
         "resourceType": "Bundle",
         "type": "batch",
@@ -133,6 +140,9 @@ async def test_bundle_single_post_preserves_full_response_and_batch_failure(stub
 
 
 async def test_patch_precondition_no_body_and_stale_version(stub):
+    """Verify PATCH transmits If-Match and preserves both bodyless success and stale-version
+    failure.
+    """
     payload = [
         {"op": "replace", "path": "/active", "value": False},
         {"op": "add", "path": "/extension", "value": None},
@@ -159,6 +169,7 @@ async def test_patch_precondition_no_body_and_stale_version(stub):
 
 
 async def test_validation_blocks_requests_with_positive_control(stub):
+    """Reject invalid tool inputs before HTTP, then prove valid input reaches the same stub."""
     async with session_for(stub) as session:
         for args in [
             {"type": "Patient", "id": "", "payload": []},
@@ -199,6 +210,7 @@ async def test_validation_blocks_requests_with_positive_control(stub):
 
 
 async def test_bundle_create_rejected_and_system_capabilities_compact(stub):
+    """Block legacy Bundle creates and verify compact discovery with explicit operation opt-in."""
     metadata = {
         "resourceType": "CapabilityStatement",
         "fhirVersion": "4.0.1",
@@ -280,6 +292,7 @@ async def test_bundle_create_rejected_and_system_capabilities_compact(stub):
 
 
 async def test_validation_diagnostics_and_unknown_bundle_mode(stub):
+    """Verify precise input diagnostics and null interaction for unsupported Bundle types."""
     async with session_for(stub) as session:
         for args, message in [
             ({"type": "Patient", "id": "", "payload": []}, "ID is required"),
@@ -329,7 +342,31 @@ async def test_validation_diagnostics_and_unknown_bundle_mode(stub):
         assert stub.requests == []
 
 
+async def test_metadata_failures_visible_over_mcp(stub):
+    """Preserve metadata failure categories through MCP without returning raw bodies."""
+    cases = [
+        (403, b"private upstream details", "upstream-http, HTTP 403"),
+        (200, b"invalid private upstream details", "protocol, HTTP 200"),
+        (200, [], "protocol, HTTP 200"),
+        (0, b"", "network"),
+    ]
+    for status, body, _ in cases:
+        stub.queue(status, body)
+    stub.queue(200, {"resourceType": "CapabilityStatement", "rest": [{"mode": "server"}]})
+    async with session_for(stub) as session:
+        for _, _, expected in cases:
+            result = await session.call_tool("get_capabilities", {})
+            body = json.loads(result.content[0].text)
+            assert body["resourceType"] == "OperationOutcome"
+            assert expected in body["issue"][0]["diagnostics"]
+            assert "private upstream" not in result.content[0].text
+        result = await session.call_tool("get_capabilities", {})
+        assert json.loads(result.content[0].text)["operationCount"] == 0
+    assert len(stub.requests) == len(cases) + 1
+
+
 async def test_protocol_errors_limits_and_pending(stub):
+    """Preserve uncertain, pending and oversized response outcomes through the MCP protocol."""
     args = {
         "bundle": {
             "resourceType": "Bundle",

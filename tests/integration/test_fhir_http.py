@@ -11,6 +11,7 @@ from tests.e2e.conftest import RecordingFhirServer
 
 @pytest.fixture
 def stub():
+    """Run a disposable loopback recorder and close it after the test."""
     server = RecordingFhirServer()
     server.start()
     try:
@@ -20,12 +21,14 @@ def stub():
 
 
 def config(stub, **kwargs):
+    """Build isolated transport settings targeting the loopback recorder under a tenant prefix."""
     return ServerConfigs(
         _env_file=None, server_base_url=stub.base_url + "/tenant/fhir/", **kwargs
     )
 
 
 async def test_exact_requests_header_isolation_and_response_allowlist(stub):
+    """Verify exact URLs and payloads, per-call credentials and filtered response headers."""
     stub.queue(
         204,
         headers={
@@ -63,6 +66,7 @@ async def test_exact_requests_header_isolation_and_response_allowlist(stub):
 
 
 async def test_mutation_and_metadata_never_follow_redirects(stub):
+    """Prove mutation and metadata redirects cannot forward credentials to another server."""
     target = RecordingFhirServer()
     target.start()
     try:
@@ -93,6 +97,9 @@ async def test_mutation_and_metadata_never_follow_redirects(stub):
     ],
 )
 async def test_raw_status_body_and_invalid_json(stub, status, body):
+    """Preserve upstream statuses while distinguishing valid JSON from unreadable response
+    bodies.
+    """
     stub.queue(status, body)
     result = await send_fhir_request(config(stub), None, "PATCH", "Patient/123", b"[]")
     assert result.status == status
@@ -102,6 +109,9 @@ async def test_raw_status_body_and_invalid_json(stub, status, body):
 
 
 async def test_size_limit_is_unknown_with_observed_status(stub):
+    """Retain observed headers and status when an oversized response leaves write completion
+    uncertain.
+    """
     stub.queue(200, b"x" * 101, {"ETag": 'W/"9"'})
     with pytest.raises(FhirTransportError) as caught:
         await send_fhir_request(
@@ -120,6 +130,7 @@ async def test_size_limit_is_unknown_with_observed_status(stub):
     "status,delay,kind", [(0, 0, "network"), (200, 1.3, "timeout")]
 )
 async def test_no_retry_on_disconnect_or_timeout(stub, status, delay, kind):
+    """Prove a timeout or post-dispatch disconnect produces an uncertain result without replay."""
     stub.queue(status, b"", delay=delay)
     with pytest.raises(FhirTransportError) as caught:
         await send_fhir_request(
@@ -130,6 +141,7 @@ async def test_no_retry_on_disconnect_or_timeout(stub, status, delay, kind):
 
 
 async def test_refused_connection_is_not_dispatched():
+    """Classify refusal on a reserved non-listening port as a definite pre-dispatch failure."""
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
         port = sock.getsockname()[1]

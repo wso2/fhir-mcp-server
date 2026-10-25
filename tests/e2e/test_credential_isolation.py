@@ -7,6 +7,7 @@ from tests.e2e.conftest import RecordingFhirServer, run_mcp_server
 
 
 async def test_anonymous_fixture_sends_no_authorization(monkeypatch):
+    """Prove the shared anonymous fixture does not forward inherited deployment credentials."""
     monkeypatch.setenv("FHIR_SERVER_ACCESS_TOKEN", "dummy-parent-token")
     stub = RecordingFhirServer()
     stub.start()
