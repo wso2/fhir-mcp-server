@@ -7,11 +7,11 @@ services:
     environment:
       DATABASE_URL: postgres://postgres:password@postgresql-server:5432/postgres?sslmode=disable&pool_max_conns=20
       FHIR_CREATE_TABLES: "true"
-      SERVER_PORT: "9090"
-      BASE_URL: http://localhost:9090/fhir/r4
+      SERVER_PORT: "8080"
+      BASE_URL: http://localhost:8080/fhir/r4
       LOG_LEVEL: info
     ports:
-      - "127.0.0.1:9090:9090"
+      - "127.0.0.1:8080:8080"
     depends_on:
       - postgresql-server
     restart: on-failure
@@ -29,7 +29,7 @@ services:
     image: docker.io/wso2/fhir-mcp-server:latest
     container_name: fhir-mcp-server-wso2
     environment:
-      FHIR_SERVER_BASE_URL: http://wso2-fhir-server:9090/fhir/r4
+      FHIR_SERVER_BASE_URL: http://wso2-fhir-server:8080/fhir/r4
       FHIR_MCP_HOST: 0.0.0.0
       FHIR_MCP_PORT: "8000"
       FHIR_MCP_REQUEST_TIMEOUT: "30"
