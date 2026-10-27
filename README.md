@@ -197,6 +197,8 @@ For a quick setup that includes both the FHIR MCP server and the [WSO2 FHIR Serv
    - FHIR Server: http://localhost:8080/fhir/r4
    - To stop run `docker compose down`.
 
+   `docker compose down` removes the database data; use `docker compose stop` to keep it between runs.
+
 4. **Configure Additional Environment Variables:**
 
    If you need to customize OAuth or other settings, adjust the env variables in the `docker-compose.yml`. The compose file sets basic configuration; refer to the [Configuration](#configuration) section for full options.
@@ -230,7 +232,8 @@ To use a different FHIR server, run the FHIR MCP server container with `FHIR_SER
    docker network rm fhir-network
    ```
 
-For any other FHIR server, set `FHIR_SERVER_BASE_URL` to its base URL. If the FHIR server runs on your host rather than in Docker, use `http://host.docker.internal:<port>/...` instead of `localhost`.
+For any other FHIR server, set `FHIR_SERVER_BASE_URL` to its base URL. If the FHIR server runs on your host rather than in Docker, use `http://host.docker.internal:<port>/...` instead of `localhost`. 
+On Linux, also add `--add-host=host.docker.internal:host-gateway` to the `docker run` command, and make sure the FHIR server listens on an address reachable from containers (for example `0.0.0.0`, not only `127.0.0.1`).
 
 ## Integration with MCP Clients
 
