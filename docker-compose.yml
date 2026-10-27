@@ -1,6 +1,3 @@
-# Separate project name so this stack does not replace the HAPI stack in docker-compose.hapi-fhir-server.yml.
-name: fhir-mcp-wso2
-
 services:
   wso2-fhir-server:
     image: ghcr.io/wso2/fhir-server:v2.2.0
@@ -27,7 +24,7 @@ services:
   fhir-mcp-server:
     build: .
     image: docker.io/wso2/fhir-mcp-server:latest
-    container_name: fhir-mcp-server-wso2
+    container_name: fhir-mcp-server
     environment:
       FHIR_SERVER_BASE_URL: http://wso2-fhir-server:8080/fhir/r4
       FHIR_MCP_HOST: 0.0.0.0
