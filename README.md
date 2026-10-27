@@ -22,7 +22,7 @@
     - [Installing using Docker](#installing-using-docker)
         - [Running the MCP Server with Docker](#running-the-mcp-server-with-docker)
         - [Using Docker Compose with WSO2 FHIR Server](#using-docker-compose-with-wso2-fhir-server)
-        - [Using Docker with Another FHIR Server](#using-docker-with-another-fhir-server)
+          - [Configuring any FHIR Server](#configuring-any-fhir-server)
   - [Integration with MCP Clients](#integration-with-mcp-clients)
     - [VS Code](#vs-code)
     - [Claude Desktop](#claude-desktop)
@@ -203,7 +203,7 @@ For a quick setup that includes both the FHIR MCP server and the [WSO2 FHIR Serv
 
    If you need to customize OAuth or other settings, adjust the env variables in the `docker-compose.yml`. The compose file sets basic configuration; refer to the [Configuration](#configuration) section for full options.
 
-#### Using Docker with Another FHIR Server
+#### Configuring any FHIR Server
 
 To use a different FHIR server, run the FHIR MCP server container with `FHIR_SERVER_BASE_URL` pointing to that server. The example below uses the [HAPI FHIR server](https://hapi.fhir.org/). Stop the default stack first if it's already running (`docker compose down`), as both use ports 8000 and 8080.
 
