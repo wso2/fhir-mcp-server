@@ -181,7 +181,17 @@ For a quick setup that includes both the FHIR MCP server and the [WSO2 FHIR Serv
 1. **Prerequisites:**
    - Docker and Docker Compose installed.
 
-2. **Run the Stack:**
+2. **Set the Database Credentials:**
+
+   Copy the example environment file and set `DB_PASSWORD` in `.env`. If you already have a `.env`, add the `DB_USER`, `DB_PASSWORD` and `DB_NAME` lines from `.env.example` to it instead.
+
+   ```bash
+   cp .env.example .env
+   ```
+
+   Docker Compose reads `.env` automatically. `DB_USER` and `DB_NAME` default to `postgres` if not set. `.env` is excluded from Git; use a secrets manager for production deployments.
+
+3. **Run the Stack:**
 
    ```bash
    docker compose up -d
@@ -192,14 +202,14 @@ For a quick setup that includes both the FHIR MCP server and the [WSO2 FHIR Serv
    - Launch the FHIR Server (connected to PostgreSQL) listening on http://localhost:8080/fhir/r4.
    - Build and run the FHIR MCP server container listening on http://localhost:8000, with `FHIR_SERVER_BASE_URL` set to http://wso2-fhir-server:8080/fhir/r4.
 
-3. **Access the Services:**
+4. **Access the Services:**
    - FHIR MCP Server: http://localhost:8000
    - FHIR Server: http://localhost:8080/fhir/r4
    - To stop run `docker compose down`.
 
    `docker compose down` removes the database data; use `docker compose stop` to keep it between runs.
 
-4. **Configure Additional Environment Variables:**
+5. **Configure Additional Environment Variables:**
 
    If you need to customize OAuth or other settings, adjust the env variables in the `docker-compose.yml`. The compose file sets basic configuration; refer to the [Configuration](#configuration) section for full options.
 
