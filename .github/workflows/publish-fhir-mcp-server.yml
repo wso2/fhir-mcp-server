@@ -4,28 +4,77 @@ on:
   push:
     branches:
       - main
+    tags:
+      - "[0-9]+.[0-9]+.[0-9]+"
+      - "[0-9]+.[0-9]+.[0-9]+a[0-9]+"
+      - "[0-9]+.[0-9]+.[0-9]+b[0-9]+"
+      - "[0-9]+.[0-9]+.[0-9]+rc[0-9]+"
     paths:
       - "**"
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Release tag to publish (e.g., 0.11.0). Leave empty to publish the selected branch."
+        required: false
+        type: string
 
 concurrency:
-  group: publish-fhir-mcp-server
+  group: publish-fhir-mcp-server-${{ github.ref }}-${{ inputs.version }}
   cancel-in-progress: true
 
 permissions:
   contents: read
-  packages: write
 
 env:
   IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/fhir-mcp-server
 
 jobs:
   publish:
+    name: Publish image
     runs-on: ubuntu-latest
+    permissions:
+      contents: read   # Required for checkout
+      packages: write  # Required to push to GHCR
 
     steps:
+      - name: Resolve release version
+        id: release
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          if [ "$REF_TYPE" = "tag" ]; then
+            VERSION="$REF_NAME"
+          else
+            VERSION="$INPUT_VERSION"
+          fi
+
+          if [ -n "$VERSION" ] && [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+((a|b|rc)[0-9]+)?$ ]]; then
+            echo "Error: Invalid version format: $VERSION"
+            exit 1
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Version: ${VERSION:-<none>}"
+
       - name: Check out source
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ steps.release.outputs.version && format('refs/tags/{0}', steps.release.outputs.version) || github.ref }}
+          persist-credentials: false
+
+      - name: Resolve source revision
+        id: source
+        run: echo "revision=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       - name: Log in to GHCR
         uses: docker/login-action@184bdaa0721073962dff0199f1fb9940f07167d1 # v3.5.0
@@ -39,14 +88,21 @@ jobs:
         uses: docker/metadata-action@c1e51972afc2121e065aed6d45c65596fe445f3f # v5.8.0
         with:
           images: ${{ env.IMAGE_NAME }}
+          flavor: |
+            latest=false
           tags: |
-            type=sha,format=long
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=sha,format=long,enable=${{ steps.release.outputs.version == '' }}
+            type=raw,value=${{ steps.release.outputs.version }},enable=${{ steps.release.outputs.version != '' }}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' && steps.release.outputs.version == '' }}
+          labels: |
+            org.opencontainers.image.version=${{ steps.release.outputs.version || steps.source.outputs.revision }}
+            org.opencontainers.image.revision=${{ steps.source.outputs.revision }}
 
       - name: Build and publish image
         uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
         with:
           context: .
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
