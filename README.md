@@ -21,7 +21,8 @@
     - [Installing from Source](#installing-from-source)
     - [Installing using Docker](#installing-using-docker)
         - [Running the MCP Server with Docker](#running-the-mcp-server-with-docker)
-        - [Using Docker Compose with HAPI FHIR Server](#using-docker-compose-with-hapi-fhir-server)
+        - [Using Docker Compose with WSO2 FHIR Server](#using-docker-compose-with-wso2-fhir-server)
+          - [Configuring any FHIR Server](#configuring-any-fhir-server)
   - [Integration with MCP Clients](#integration-with-mcp-clients)
     - [VS Code](#vs-code)
     - [Claude Desktop](#claude-desktop)
@@ -173,32 +174,76 @@ You can run the MCP server using Docker for a consistent, isolated environment.
 
     This will start the server and expose it on port 8000. Adjust the port mapping as needed.
 
-#### Using Docker Compose with HAPI FHIR Server
+#### Using Docker Compose with WSO2 FHIR Server
 
-For a quick setup that includes both the FHIR MCP server and a HAPI FHIR server (with PostgreSQL), use the provided `docker-compose.yml`. This sets up an instant development environment for testing FHIR operations.
+For a quick setup that includes both the FHIR MCP server and the [WSO2 FHIR Server](https://github.com/wso2/fhir-server) (with PostgreSQL), use the provided `docker-compose.yml`. This sets up an instant development environment for testing FHIR operations.
 
 1. **Prerequisites:**
    - Docker and Docker Compose installed.
 
-2. **Run the Stack:**
+2. **Set the Database Credentials:**
+
+   Copy the example environment file and set `DB_PASSWORD` in `.env`. If you already have a `.env`, add the `DB_USER`, `DB_PASSWORD` and `DB_NAME` lines from `.env.example` to it instead.
 
    ```bash
-   docker-compose up -d
+   cp .env.example .env
+   ```
+
+   Docker Compose reads `.env` automatically. `DB_USER` and `DB_NAME` default to `postgres` if not set. `.env` is excluded from Git; use a secrets manager for production deployments.
+
+3. **Run the Stack:**
+
+   ```bash
+   docker compose up -d
    ```
 
    This command will:
    - Start a PostgreSQL database container.
-   - Launch the HAPI FHIR server (connected to PostgreSQL) listening on http://localhost:8080.
-   - Build and run the FHIR MCP server container listening on http://localhost:8000, with `FHIR_SERVER_BASE_URL` set to http://hapi-r4-postgresql:8080/fhir.
+   - Launch the FHIR Server (connected to PostgreSQL) listening on http://localhost:8080/fhir/r4.
+   - Build and run the FHIR MCP server container listening on http://localhost:8000, with `FHIR_SERVER_BASE_URL` set to http://wso2-fhir-server:8080/fhir/r4.
 
-3. **Access the Services:**
+4. **Access the Services:**
    - FHIR MCP Server: http://localhost:8000
-   - HAPI FHIR Server: http://localhost:8080
-   - To stop run `docker-compose down`.
+   - FHIR Server: http://localhost:8080/fhir/r4
+   - To stop run `docker compose down`.
 
-4. **Configure Additional Environment Variables:**
+   `docker compose down` removes the database data; use `docker compose stop` to keep it between runs.
+
+5. **Configure Additional Environment Variables:**
 
    If you need to customize OAuth or other settings, adjust the env variables in the `docker-compose.yml`. The compose file sets basic configuration; refer to the [Configuration](#configuration) section for full options.
+
+#### Configuring any FHIR Server
+
+To use a different FHIR server, run the FHIR MCP server container with `FHIR_SERVER_BASE_URL` pointing to that server. The example below uses the [HAPI FHIR server](https://hapi.fhir.org/). Stop the default stack first if it's already running (`docker compose down`), as both use ports 8000 and 8080.
+
+1. **Create a network and start the HAPI FHIR server:**
+
+   ```bash
+   docker network create fhir-network
+   docker run -d --name hapi-fhir-server --network fhir-network -p 127.0.0.1:8080:8080 docker.io/hapiproject/hapi:v8.4.0-2
+   ```
+
+   HAPI FHIR listens on http://localhost:8080/fhir. This uses its built-in database, so data is lost when the container is removed.
+
+2. **Build and run the FHIR MCP server container:**
+
+   ```bash
+   docker build -t fhir-mcp-server .
+   docker run -d --name fhir-mcp-server-hapi --network fhir-network -p 127.0.0.1:8000:8000      -e FHIR_SERVER_BASE_URL=http://hapi-fhir-server:8080/fhir      -e FHIR_MCP_HOST=0.0.0.0      -e FHIR_SERVER_DISABLE_AUTHORIZATION=True      fhir-mcp-server
+   ```
+
+   The FHIR MCP server listens on http://localhost:8000.
+
+3. **Stop and clean up:**
+
+   ```bash
+   docker rm -f fhir-mcp-server-hapi hapi-fhir-server
+   docker network rm fhir-network
+   ```
+
+For any other FHIR server, set `FHIR_SERVER_BASE_URL` to its base URL. If the FHIR server runs on your host rather than in Docker, use `http://host.docker.internal:<port>/...` instead of `localhost`. 
+On Linux, also add `--add-host=host.docker.internal:host-gateway` to the `docker run` command, and make sure the FHIR server listens on an address reachable from containers (for example `0.0.0.0`, not only `127.0.0.1`).
 
 ## Integration with MCP Clients
 
