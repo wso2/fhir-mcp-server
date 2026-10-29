@@ -17,6 +17,8 @@
 import click
 import logging
 
+from importlib.metadata import version as package_version
+
 from fhir_mcp_server.field_filter import filter_response_fields
 from fhir_mcp_server.utils import (
     build_user_profile,
@@ -140,7 +142,11 @@ def configure_mcp_server() -> FastMCP:
         fastmcp_kwargs["auth"] = auth_settings
     else:
         logger.warning("MCP authentication is disabled.")
-    return FastMCP(**fastmcp_kwargs)
+    mcp: FastMCP = FastMCP(**fastmcp_kwargs)
+    # FastMCP does not accept a version, so the low-level server would otherwise
+    # report the MCP SDK version in serverInfo.
+    mcp._mcp_server.version = package_version("fhir-mcp-server")
+    return mcp
 
 
 def register_mcp_routes(
