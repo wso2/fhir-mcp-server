@@ -66,7 +66,7 @@ https://github.com/user-attachments/assets/96b433f1-3e53-4564-8466-65ab48d521de
 
 ## Prerequisites
 
-- Python 3.8+
+- Python 3.12+
 - [uv](https://github.com/astral-sh/uv) (for dependency management)
 - An accessible FHIR API server.
 
@@ -448,6 +448,9 @@ uv run fhir-mcp-server --help
 - `FHIR_MCP_HOST`: The hostname or IP address the MCP server should bind to (e.g., `localhost` for local-only access, or `0.0.0.0` for all interfaces).
 - `FHIR_MCP_PORT`: The port on which the MCP server will listen for incoming client requests (e.g., `8000`).
 - `FHIR_MCP_SERVER_URL`: If set, this value will be used as the server's base URL instead of generating it from host and port. Useful for custom URL configurations or when behind a proxy.
+- `FHIR_MCP_ENABLE_WRITE_TOOLS`: Register create/update/delete/execute_bundle/patch (default: `False`). Server access policies still enforce permissions.
+- `FHIR_MCP_MAX_INTERACTION_REQUEST_BYTES`: Positive input-byte limit for Bundle/PATCH (default: `1048576`).
+- `FHIR_MCP_MAX_INTERACTION_RESPONSE_BYTES`: Positive response-byte limit for Bundle/PATCH (default: `8388608`).
 - `FHIR_MCP_REQUEST_TIMEOUT`: Timeout duration in seconds for requests from the MCP server to the FHIR server (default: `30`).
 
 **MCP Server OAuth2 with FHIR server Configuration (MCP Client ↔ MCP Server):**
@@ -465,7 +468,24 @@ These variables configure the MCP client's secure connection to the MCP server, 
 
 ## Tools
 
-- `get_capabilities`: Retrieves metadata about a specified FHIR resource type, including its supported search parameters and custom operations.
+Write tools require `FHIR_MCP_ENABLE_WRITE_TOOLS=True` and an appropriately scoped
+FHIR identity. **Migration:** create/update/delete are now disabled by default,
+along with execute_bundle and patch. Restart after opting in. Existing enabled
+CRUD argument and success-response schemas are unchanged. `create` now rejects
+Bundle types/payloads; use `execute_bundle` so all execution uses its validation
+and limits. System capabilities omit operation details by default; request them
+with `include_operations=true`.
+
+See [Bundle execution, JSON PATCH and result interpretation](docs/bundle-and-patch.md)
+for examples, limits, supported routes, concurrency and partial/unknown outcomes.
+
+- `execute_bundle(bundle, prefer="representation")`: executes a transaction or batch
+  with one POST to the FHIR base; preserves the complete response Bundle and entry outcomes.
+- `patch(type, id, payload, if_match=None, prefer="representation")`: sends JSON PATCH
+  to an instance, preserving HTTP status, selected headers and the actual response.
+
+
+- `get_capabilities`: Retrieves metadata about a specified FHIR resource type, including its supported search parameters and custom operations. Omit `type` for system interactions, FHIR version, patch formats and resource type names. Discovery is advisory.
     - `type`: The FHIR resource type name (e.g., "Patient", "Observation", "Encounter")
 
 - `search`: Executes a standard FHIR search interaction on a given resource type, returning a bundle or list of matching resources.
@@ -531,13 +551,13 @@ The project includes a comprehensive test suite covering all major functionality
 python run_tests.py
 
 # Or direct pytest usage
-PYTHONPATH=src python -m pytest tests/ -v --cov=src/fhir_mcp_server
+python -m pytest tests/unit tests/integration tests/test_utils.py -v
 ```
 **Using pytest:**
 ```bash
-pytest tests/
+pytest tests/unit tests/integration tests/test_utils.py tests/e2e/test_bundle_patch.py tests/e2e/test_credential_isolation.py
 ```
-This will discover and run all tests in the `tests/` directory.
+These commands run offline and loopback tests. Existing public HAPI tests in `tests/e2e/test_tools.py` perform live operations when selected. Aidbox acceptance under `tests/aidbox` requires explicit opt-in; see [test instructions](tests/README.md).
 
 
 **Test Features:**
@@ -545,7 +565,7 @@ This will discover and run all tests in the `tests/` directory.
 - **Full async/await support** using pytest-asyncio
 - **Complete mocking** of HTTP requests and external dependencies
 - **Coverage reporting** with terminal and HTML output
-- **Fast execution** with no real network calls
+- **Offline unit tests**, loopback protocol tests and separately selected live interoperability tests
 
 The test suite includes:
 - **Unit tests**: Core functionality testing

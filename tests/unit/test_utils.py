@@ -15,6 +15,7 @@
 # under the License.
 
 import pytest
+import httpx
 import json
 from unittest.mock import AsyncMock, Mock, patch
 from typing import Dict, Any
@@ -32,6 +33,7 @@ from fhir_mcp_server.utils import (
     validate_resource_id,
 )
 from fhir_mcp_server.oauth.types import ServerConfigs
+from fhir_mcp_server.interactions import FhirTransportError
 
 
 class TestCreateAsyncFhirClient:
@@ -274,24 +276,27 @@ class TestGetCapabilityStatement:
             assert result == expected_metadata
             mock_client.get.assert_called_once_with(
                 url=metadata_url, 
-                headers=get_default_headers()
+                headers=get_default_headers(), timeout=30, follow_redirects=False
             )
             mock_response.raise_for_status.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_get_capability_statement_http_error(self):
+    @pytest.mark.parametrize("status", [302, 401, 403, 404, 500])
+    async def test_get_capability_statement_http_error(self, status):
         """Test capability statement retrieval with HTTP error."""
         metadata_url = "https://example.fhir.org/R4/metadata"
         
         with patch('fhir_mcp_server.utils.create_mcp_http_client') as mock_client_context:
             mock_client = AsyncMock()
-            mock_response = Mock()
-            mock_response.raise_for_status.side_effect = Exception("HTTP 404")
+            mock_response = httpx.Response(status, request=httpx.Request("GET", metadata_url))
             mock_client.get.return_value = mock_response
             mock_client_context.return_value.__aenter__.return_value = mock_client
             
-            with pytest.raises(ValueError, match="Unable to fetch FHIR metadata"):
+            with pytest.raises(FhirTransportError, match="Unable to fetch FHIR metadata") as caught:
                 await get_capability_statement(metadata_url)
+            assert caught.value.kind == "upstream-http"
+            assert caught.value.status == status
+            assert not caught.value.uncertain
 
     @pytest.mark.asyncio
     async def test_get_capability_statement_json_error(self):
@@ -301,12 +306,46 @@ class TestGetCapabilityStatement:
         with patch('fhir_mcp_server.utils.create_mcp_http_client') as mock_client_context:
             mock_client = AsyncMock()
             mock_response = Mock()
+            mock_response.status_code = 200
             mock_response.json.side_effect = json.JSONDecodeError("Invalid JSON", "", 0)
             mock_client.get.return_value = mock_response
             mock_client_context.return_value.__aenter__.return_value = mock_client
             
-            with pytest.raises(ValueError, match="Unable to fetch FHIR metadata"):
+            with pytest.raises(FhirTransportError, match="Unable to fetch FHIR metadata") as caught:
                 await get_capability_statement(metadata_url)
+            assert caught.value.kind == "protocol"
+            assert caught.value.status == 200
+            assert not caught.value.uncertain
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("body", [[], None, "not metadata", 42])
+    async def test_metadata_requires_json_object(self, body):
+        """Reject valid JSON scalars and arrays as protocol failures, not metadata."""
+        with patch('fhir_mcp_server.utils.create_mcp_http_client') as context:
+            client = context.return_value.__aenter__.return_value
+            client.get.return_value = httpx.Response(
+                200, json=body, request=httpx.Request("GET", "https://example.invalid/metadata"),
+            )
+            with pytest.raises(FhirTransportError) as caught:
+                await get_capability_statement("https://example.invalid/metadata")
+        assert caught.value.kind == "protocol" and caught.value.status == 200
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("error,kind", [
+        (httpx.ConnectError("sensitive connection details"), "network"),
+        (httpx.ReadTimeout("sensitive timeout details"), "timeout"),
+        (RuntimeError("sensitive internal details"), "network"),
+    ])
+    async def test_metadata_connection_failures_are_sanitized(self, error, kind):
+        """Classify connection errors without copying potentially sensitive details."""
+        with patch('fhir_mcp_server.utils.create_mcp_http_client') as context:
+            client = context.return_value.__aenter__.return_value
+            client.get.side_effect = error
+            with pytest.raises(FhirTransportError) as caught:
+                await get_capability_statement("https://example.invalid/metadata")
+        assert caught.value.kind == kind and caught.value.status is None
+        assert not caught.value.uncertain
+        assert "sensitive" not in str(caught.value)
 
 
 class TestGetDefaultHeaders:
@@ -351,19 +390,23 @@ class TestPathParameterValidation:
         "a" * 65,
     ])
     async def test_validate_resource_id_rejects_traversal(self, bad_id):
+        """Reject resource IDs containing traversal, encoded path segments or excessive length."""
         outcome = await validate_resource_id(bad_id)
         assert outcome is not None
         assert outcome["issue"][0]["code"] == "invalid"
 
     @pytest.mark.parametrize("good_id", ["123", "patient-001", "1.2.840.113619", "", "A" * 64])
     async def test_validate_resource_id_accepts_valid(self, good_id):
+        """Preserve legacy acceptance of valid IDs and the optional empty ID."""
         assert await validate_resource_id(good_id) is None
 
     @pytest.mark.parametrize("bad_op", ["../../admin", "$ever/ything", "%2e%2e/admin", "a/b"])
     async def test_validate_operation_rejects_traversal(self, bad_op):
+        """Reject operation names containing raw or encoded path traversal."""
         assert await validate_operation(bad_op) is not None
 
     @pytest.mark.parametrize("good_op", ["$everything", "$expunge", "_history", "metadata", ""])
     async def test_validate_operation_accepts_valid(self, good_op):
+        """Accept optional operation names and supported dollar or underscore prefixes."""
         assert await validate_operation(good_op) is None
 
