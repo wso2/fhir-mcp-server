@@ -382,7 +382,11 @@ jobs:
           set -euo pipefail
           
           echo "Installing MCP Publisher..."
-          curl -L "https://github.com/modelcontextprotocol/registry/releases/download/latest/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
+          ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
+          OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+          BINARY_URL="https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_${OS}_${ARCH}.tar.gz"
+
+          curl -fL "$BINARY_URL" | tar xz mcp-publisher
           chmod +x mcp-publisher
           
           echo "✓ MCP Publisher installed successfully"
