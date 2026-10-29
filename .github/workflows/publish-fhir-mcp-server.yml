@@ -95,7 +95,6 @@ jobs:
             type=raw,value=${{ steps.release.outputs.version }},enable=${{ steps.release.outputs.version != '' }}
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' && steps.release.outputs.version == '' }}
           labels: |
-            org.opencontainers.image.version=${{ steps.release.outputs.version || steps.source.outputs.revision }}
             org.opencontainers.image.revision=${{ steps.source.outputs.revision }}
 
       - name: Build and publish image
