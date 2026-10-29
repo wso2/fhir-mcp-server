@@ -152,8 +152,9 @@ You can run the MCP server using Docker for a consistent, isolated environment.
         ```
     * Pull from GitHub Container Registry:
         ```bash
-        docker pull wso2/fhir-mcp-server:latest
+        docker pull ghcr.io/wso2/fhir-mcp-server:latest
         ```
+        `latest` is built from the `main` branch. To use a release, pull its version tag instead, for example `ghcr.io/wso2/fhir-mcp-server:0.11.0`.
 
 2. Configure Environment Variables
 
@@ -169,7 +170,7 @@ You can run the MCP server using Docker for a consistent, isolated environment.
 3. Run the Container
 
     ```bash
-    docker run --env-file .env -p 8000:8000 fhir-mcp-server
+    docker run --env-file .env -p 8000:8000 ghcr.io/wso2/fhir-mcp-server:latest
     ```
 
     This will start the server and expose it on port 8000. Adjust the port mapping as needed.
