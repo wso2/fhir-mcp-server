@@ -64,38 +64,41 @@ jobs:
         with:
           egress-policy: audit
 
-      - name: Fetch information from PyPI
-        run: |
-          set -euo pipefail  # Enable strict error handling
-          
-          echo "Checking package ${{ env.PACKAGE_NAME }} on PyPI..."
-          response=$(curl -s --fail-with-body "https://pypi.org/pypi/${{ env.PACKAGE_NAME }}/json" || echo "{}")
-          
-          latest_previous_version=$(echo "$response" | jq --raw-output "select(.releases != null) | .releases | keys_unsorted | last" || echo "")
-          
-          if [ -z "$latest_previous_version" ] || [ "$latest_previous_version" = "null" ]; then
-            echo "Package not found on PyPI or no releases available."
-            latest_previous_version="0.0.0"
-          fi
-          
-          echo "Latest version on PyPI: $latest_previous_version"
-          echo "latest_previous_version=$latest_previous_version" >> $GITHUB_ENV
-
-      - name: Compare versions and exit if not newer
+      - name: Check version against PyPI
+        env:
+          NEW_VERSION: ${{ needs.details.outputs.new_version }}
         run: |
           set -euo pipefail
-          
-          NEW_VERSION=${{ needs.details.outputs.new_version }}
-          LATEST_VERSION=$latest_previous_version
-          
-          echo "Comparing versions: $LATEST_VERSION (PyPI) vs $NEW_VERSION (new)"
-          
-          if [ "$(printf '%s\n' "$LATEST_VERSION" "$NEW_VERSION" | sort -rV | head -n 1)" != "$NEW_VERSION" ] || [ "$NEW_VERSION" == "$LATEST_VERSION" ]; then
+
+          echo "Checking $NEW_VERSION against package $PACKAGE_NAME on PyPI..."
+
+          # The per-version endpoint is authoritative; the project index below can be served stale from cache.
+          status=$(curl -s -o /dev/null -w "%{http_code}" "https://pypi.org/pypi/$PACKAGE_NAME/$NEW_VERSION/json")
+          if [ "$status" = "200" ]; then
+            echo "Error: Version $NEW_VERSION is already published on PyPI."
+            exit 1
+          elif [ "$status" != "404" ]; then
+            echo "Error: Unexpected HTTP $status from PyPI while checking $NEW_VERSION."
+            exit 1
+          fi
+
+          # Map PEP 440 pre-releases (a/b/rc) to "~" so sort -V orders 0.12.0rc1 before 0.12.0.
+          to_sortable() { sed -E 's/([0-9])(a|b|rc)([0-9]+)$/\1~\2\3/'; }
+
+          response=$(curl -s --fail-with-body "https://pypi.org/pypi/$PACKAGE_NAME/json" || echo "{}")
+          LATEST_VERSION=$(echo "$response" | jq -r '.releases // {} | keys[]' \
+            | while read -r v; do printf '%s %s\n' "$(echo "$v" | to_sortable)" "$v"; done \
+            | sort -V -k1,1 | tail -n 1 | cut -d' ' -f2)
+          LATEST_VERSION=${LATEST_VERSION:-0.0.0}
+          echo "Latest version on PyPI: $LATEST_VERSION"
+
+          highest=$(printf '%s\n%s\n' "$(echo "$LATEST_VERSION" | to_sortable)" "$(echo "$NEW_VERSION" | to_sortable)" | sort -V | tail -n 1)
+          if [ "$highest" != "$(echo "$NEW_VERSION" | to_sortable)" ]; then
             echo "Error: The new version $NEW_VERSION is not greater than the latest version $LATEST_VERSION on PyPI."
             exit 1
-          else
-            echo "✓ The new version $NEW_VERSION is greater than the latest version $LATEST_VERSION on PyPI."
           fi
+
+          echo "✓ $NEW_VERSION is not on PyPI and is greater than $LATEST_VERSION."
 
   setup_and_build:
     needs: [details, check_pypi]
