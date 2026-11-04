@@ -26,6 +26,22 @@ tests/
 
 ## Running Tests
 
+The shared e2e launcher explicitly overrides access-token and OAuth credential
+settings with empty values, preventing inherited environment variables or the
+project `.env` from authenticating requests to test backends. Both the existing
+public HAPI fixture and the local recording fixture use this isolation.
+
+Run the credential-isolation regression checks without contacting an external
+FHIR server:
+
+```bash
+python -m pytest tests/unit/test_e2e_environment.py tests/e2e/test_credential_isolation.py -q
+```
+
+The live `test_tool_*` tests in `tests/e2e/test_tools.py` still contact public HAPI
+and include resource writes. Credential isolation does not make those tests
+offline; select the local tests explicitly when external calls are unwanted.
+
 ### Option 1: Using the test runner script (Recommended)
 ```bash
 python run_tests.py
@@ -157,3 +173,36 @@ When adding new tests:
 3. Mock external dependencies
 4. Test both success and failure scenarios
 5. Update this README if adding new test categories
+
+## Bundle/PATCH tests
+
+Run local validation, transport and protocol checks without contacting a live FHIR server:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests/unit tests/integration tests/test_utils.py tests/e2e/test_bundle_patch.py tests/e2e/test_credential_isolation.py -q
+```
+
+The recording stub captures bodies and test request headers using dummy
+credentials. The shared subprocess environment explicitly overrides deployment
+credentials and write/limit settings. Fixtures exercising writes opt in explicitly.
+
+Aidbox acceptance is skipped by default. Configure these process environment
+variables explicitly for a disposable sandbox:
+
+- `FHIR_TEST_AIDBOX_ENABLE=true`
+- `FHIR_TEST_AIDBOX_URL`: Aidbox FHIR endpoint ending in `/fhir`.
+- `FHIR_TEST_AIDBOX_TOKEN`: restricted service token (never commit it).
+
+The identity must permit Patient and Observation CRUD, FHIRPath PATCH and Bundle
+execution, while denying Condition writes and native Client/AccessPolicy/User
+administration. The test generates unique synthetic IDs, verifies denial before
+writes and deletes its own resources afterward. Resource history may remain.
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests/aidbox -q --no-cov --tb=short -s
+```
+
+The test exercises the new tools through a separate MCP process on port 8001.
+It checks linked transactions, rollback, batch partial success, conditional create,
+current/stale ETags, failed JSON Patch tests, Parameters patches and return
+preferences. Run live acceptance separately from other port-8001 protocol tests.

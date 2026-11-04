@@ -19,7 +19,7 @@ import json
 import logging
 
 from typing import Any, Dict
-from pydantic import AnyHttpUrl, BaseModel
+from pydantic import AnyHttpUrl, BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
@@ -42,6 +42,10 @@ class ServerConfigs(BaseSettings):
     mcp_server_url: str | None = None
     mcp_request_timeout: int = 30  # in secs
 
+    mcp_enable_write_tools: bool = False
+    mcp_max_interaction_request_bytes: int = Field(default=1048576, gt=0)
+    mcp_max_interaction_response_bytes: int = Field(default=8388608, gt=0)
+
     # FHIR settings
     server_client_id: str = ""
     server_client_secret: str = ""
@@ -53,19 +57,23 @@ class ServerConfigs(BaseSettings):
     def callback_url(
         self, server_url: str, suffix: str = "/oauth/callback"
     ) -> AnyHttpUrl:
+        """Build the OAuth callback URL from the externally visible MCP base URL."""
         return AnyHttpUrl(f"{server_url.rstrip('/')}{suffix}")
 
     @property
     def discovery_url(self) -> str:
+        """Return the SMART discovery endpoint beneath the configured FHIR base."""
         return f"{self.server_base_url.rstrip('/')}/.well-known/smart-configuration"
 
     @property
     def metadata_url(self) -> str:
+        """Return the FHIR metadata endpoint with JSON explicitly requested."""
         return f"{self.server_base_url.rstrip('/')}/metadata?_format=json"
 
     @property
     def scopes(self) -> list[str]:
         # If the raw value is a string, split on empty spaces
+        """Split configured OAuth scopes and discard empty space-delimited entries."""
         if isinstance(self.server_scopes, str):
             return [
                 scope.strip()
@@ -76,6 +84,7 @@ class ServerConfigs(BaseSettings):
 
     @property
     def effective_server_url(self) -> str:
+        """Prefer the explicit external MCP URL, falling back to the local host and port."""
         return self.mcp_server_url or f"http://{self.mcp_host}:{self.mcp_port}"
 
     def __init__(self, **data):
@@ -127,6 +136,7 @@ class OAuthToken(BaseModel):
 
     @property
     def scopes(self) -> list[str]:
+        """Return the granted scope strings, or an empty list when scope is absent."""
         return self.scope.split(" ") if self.scope else []
 
     def get_id_token(self) -> "IDToken | None":
