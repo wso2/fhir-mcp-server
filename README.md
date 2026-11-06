@@ -7,6 +7,8 @@
 [![Listed on Spark](https://spark.entire.vc/badges/listed.svg)](https://spark.entire.vc/assets/vb-fhir?utm_source=github&utm_medium=readme)
 [![Install via Spark](https://spark.entire.vc/badges/vb-fhir/install.svg)](https://spark.entire.vc/assets/vb-fhir?utm_source=github&utm_medium=readme)
 [![Listed on MCP ServerList](https://mcp-serverlist.com/api/badge/fhir-mcp-server-1)](https://mcp-serverlist.com/mcp/fhir-mcp-server-1)
+![PyPI Downloads](https://img.shields.io/pypi/dm/fhir-mcp-server)
+
 
 ## Table of Contents
 - [Model Context Protocol (MCP) Server for Fast Healthcare Interoperability Resources (FHIR) APIs](#model-context-protocol-mcp-server-for-fast-healthcare-interoperability-resources-fhir-apis)
