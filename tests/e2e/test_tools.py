@@ -264,6 +264,16 @@ def tagged_patient(tag: str) -> Dict:
     }
 
 
+def tagged_observation(tag: str, subject_reference: str) -> Dict:
+    return {
+        "resourceType": "Observation",
+        "identifier": [{"system": TEST_IDENTIFIER_SYSTEM, "value": tag}],
+        "status": "final",
+        "code": {"text": f"Test observation {tag}"},
+        "subject": {"reference": subject_reference},
+    }
+
+
 def entry_status(entry: Dict) -> int:
     """Return the numeric status of a response Bundle entry, e.g. 201 from '201 Created'."""
     return int(entry["response"]["status"].split()[0])
@@ -287,26 +297,39 @@ def structured(tool_result: types.CallToolResult) -> Dict:
     return tool_result.structuredContent
 
 
-async def delete_resources(references: list[str]) -> None:
-    """Delete test resources in one batch, dependents first."""
-    if not references:
-        return
+async def delete_resource(reference: str) -> None:
+    """Delete one test resource and confirm the server accepted the deletion."""
     bundle = {
         "resourceType": "Bundle",
         "type": "batch",
-        "entry": [{"request": {"method": "DELETE", "url": ref}} for ref in references],
+        "entry": [{"request": {"method": "DELETE", "url": reference}}],
     }
     result = structured(await call_tool_result("execute_bundle", {"bundle": bundle}))
-    statuses = [entry_status(e) for e in result["response"]["entry"]]
-    assert all(200 <= s < 300 for s in statuses), f"Cleanup failed: {result}"
+    status = entry_status(result["response"]["entry"][0])
+    assert 200 <= status < 300, f"Cleanup of {reference} failed: {result}"
 
 
-async def tagged_patient_ids(tag: str) -> list[str]:
+async def tagged_ids(resource_type: str, tag: str) -> list[str]:
+    """Return the ids of resources of this type that carry the test tag."""
     response = await call_tool(
         "search",
-        {"type": "Patient", "searchParam": {"identifier": f"{TEST_IDENTIFIER_SYSTEM}|{tag}"}},
+        {"type": resource_type, "searchParam": {"identifier": f"{TEST_IDENTIFIER_SYSTEM}|{tag}"}},
     )
     return [entry["resource"]["id"] for entry in response.get("entry") or []]
+
+
+async def delete_tagged(tag: str) -> list[str]:
+    """Find and delete every resource carrying the test tag, Observations before Patients.
+
+    Each deletion is a separate request that completes before the next starts, so a
+    Patient is deleted only after the Observations referencing it are gone. Returns
+    the references that were found.
+    """
+    found = [f"Observation/{id}" for id in await tagged_ids("Observation", tag)]
+    found += [f"Patient/{id}" for id in await tagged_ids("Patient", tag)]
+    for reference in found:
+        await delete_resource(reference)
+    return found
 
 
 @pytest.mark.asyncio
@@ -323,17 +346,11 @@ async def test_tool_execute_bundle_transaction(mcp_server):
                 "request": {"method": "POST", "url": "Patient"},
             },
             {
-                "resource": {
-                    "resourceType": "Observation",
-                    "status": "final",
-                    "code": {"text": f"Test observation {tag}"},
-                    "subject": {"reference": patient_urn},
-                },
+                "resource": tagged_observation(tag, patient_urn),
                 "request": {"method": "POST", "url": "Observation"},
             },
         ],
     }
-    created: list[str] = []
     try:
         tool_result = await call_tool_result("execute_bundle", {"bundle": bundle})
         result = structured(tool_result)
@@ -346,13 +363,13 @@ async def test_tool_execute_bundle_transaction(mcp_server):
         entries = result["response"]["entry"]
         assert [entry_status(e) for e in entries] == [201, 201], f"Unexpected statuses: {result}"
         patient_id, observation_id = entry_id(entries[0]), entry_id(entries[1])
-        created = [f"Observation/{observation_id}", f"Patient/{patient_id}"]
 
         # The server resolved the urn:uuid reference to the new Patient.
         observation = await call_tool("read", {"type": "Observation", "id": observation_id})
         assert observation["subject"]["reference"] == f"Patient/{patient_id}"
     finally:
-        await delete_resources(created)
+        # Cleanup finds resources by tag, so it also runs when an assertion fails.
+        await delete_tagged(tag)
 
 
 @pytest.mark.asyncio
@@ -370,25 +387,21 @@ async def test_tool_execute_bundle_transaction_rolls_back(mcp_server):
             # the whole transaction. (A failed GET entry would not: HAPI reports it
             # per entry and still commits the writes.)
             {
-                "resource": {
-                    "resourceType": "Observation",
-                    "status": "final",
-                    "code": {"text": f"Test observation {tag}"},
-                    "subject": {"reference": f"Patient/missing-{tag[:16]}"},
-                },
+                "resource": tagged_observation(tag, f"Patient/missing-{tag[:16]}"),
                 "request": {"method": "POST", "url": "Observation"},
             },
         ],
     }
-    tool_result = await call_tool_result("execute_bundle", {"bundle": bundle})
-    result = structured(tool_result)
-    assert tool_result.isError, f"Transaction unexpectedly succeeded: {result}"
-    assert result["status"] == "failure"
-    assert result["httpStatus"] >= 400
-
-    leftover = await tagged_patient_ids(tag)
-    await delete_resources([f"Patient/{id}" for id in leftover])
-    assert not leftover, "The failed transaction left its Patient behind"
+    leftover: list[str] = []
+    try:
+        tool_result = await call_tool_result("execute_bundle", {"bundle": bundle})
+        result = structured(tool_result)
+        assert tool_result.isError, f"Transaction unexpectedly succeeded: {result}"
+        assert result["status"] == "failure"
+        assert result["httpStatus"] >= 400
+    finally:
+        leftover = await delete_tagged(tag)
+    assert not leftover, f"The failed transaction left resources behind: {leftover}"
 
 
 @pytest.mark.asyncio
@@ -405,14 +418,10 @@ async def test_tool_execute_bundle_batch_partial(mcp_server):
             {"request": {"method": "GET", "url": f"Patient/missing-{tag[:16]}"}},
         ],
     }
-    created: list[str] = []
     try:
         tool_result = await call_tool_result("execute_bundle", {"bundle": bundle})
         result = structured(tool_result)
         entries = result["response"]["entry"]
-        if entry_status(entries[0]) == 201:
-            created = [f"Patient/{entry_id(entries[0])}"]
-
         assert result["interaction"] == "batch"
         assert result["httpStatus"] == 200
         assert result["status"] == "partial", f"Expected a partial batch: {result}"
@@ -420,7 +429,7 @@ async def test_tool_execute_bundle_batch_partial(mcp_server):
         assert [entry_status(e) for e in entries] == [201, 404], f"Unexpected statuses: {result}"
         assert result["summary"]["succeeded"] == 1 and result["summary"]["failed"] == 1
     finally:
-        await delete_resources(created)
+        await delete_tagged(tag)
 
 
 @pytest.mark.asyncio
@@ -483,7 +492,7 @@ async def test_tool_patch(mcp_server, patient_id):
         patient = await call_tool("read", {"type": "Patient", "id": patient_id})
         assert patient["gender"] == "female", f"Rejected patches changed the Patient: {patient}"
     finally:
-        await delete_resources([f"Patient/{patient_id}"])
+        await delete_resource(f"Patient/{patient_id}")
 
 
 async def extract_resource(tool_result: types.CallToolResult) -> Dict:

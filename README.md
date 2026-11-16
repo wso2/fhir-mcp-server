@@ -508,7 +508,7 @@ These variables configure the MCP client's secure connection to the MCP server, 
     - `searchParam`: A mapping of FHIR search parameter names to their desired values (e.g., {"category":"laboratory","issued:"2025-05-01"}).
     - `operation`: The name of a custom FHIR operation or extended query defined for the resource (e.g., "$expand").
 
-- `execute_bundle`: Sends a `transaction` or `batch` Bundle in a single request and returns the response Bundle with each entry's status. See [Bundle execution and JSON Patch](docs/bundle-and-patch.md).
+- `execute_bundle`: Sends a `transaction` or `batch` Bundle in a single request. Returns a result object, not a Bundle: its `status` is `success`, `partial`, `failure`, `pending` (HTTP 202) or `unknown`, and its `response` field holds the server's response Bundle with each entry's status. See [Bundle execution and JSON Patch](docs/bundle-and-patch.md).
     - `bundle`: The complete Bundle resource, with `type` set to `transaction` or `batch`.
     - `prefer`: (Optional) `representation` (default) or `minimal`.
 
