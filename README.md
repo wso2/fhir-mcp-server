@@ -69,7 +69,7 @@ https://github.com/user-attachments/assets/96b433f1-3e53-4564-8466-65ab48d521de
 
 ## Prerequisites
 
-- Python 3.12+
+- Python 3.8+
 - [uv](https://github.com/astral-sh/uv) (for dependency management)
 - An accessible FHIR API server.
 
@@ -217,8 +217,6 @@ For a quick setup that includes both the FHIR MCP server and the [WSO2 FHIR Serv
 
    If you need to customize OAuth or other settings, adjust the env variables in the `docker-compose.yml`. The compose file sets basic configuration; refer to the [Configuration](#configuration) section for full options.
 
-   The stack starts with write tools disabled, so MCP clients can only read. To let them create, update, delete, patch or run Bundles, uncomment `FHIR_MCP_ENABLE_WRITE_TOOLS: "True"` in `docker-compose.yml` and run `docker compose up -d` again.
-
 #### Configuring any FHIR Server
 
 To use a different FHIR server, run the FHIR MCP server container with `FHIR_SERVER_BASE_URL` pointing to that server. The example below uses the [HAPI FHIR server](https://hapi.fhir.org/). Stop the default stack first if it's already running (`docker compose down`), as both use ports 8000 and 8080.
@@ -239,7 +237,7 @@ To use a different FHIR server, run the FHIR MCP server container with `FHIR_SER
    docker run -d --name fhir-mcp-server-hapi --network fhir-network -p 127.0.0.1:8000:8000      -e FHIR_SERVER_BASE_URL=http://hapi-fhir-server:8080/fhir      -e FHIR_MCP_HOST=0.0.0.0      -e FHIR_SERVER_DISABLE_AUTHORIZATION=True      fhir-mcp-server
    ```
 
-   The FHIR MCP server listens on http://localhost:8000. Write tools are disabled; add `-e FHIR_MCP_ENABLE_WRITE_TOOLS=True` to enable them.
+   The FHIR MCP server listens on http://localhost:8000.
 
 3. **Stop and clean up:**
 
@@ -254,8 +252,6 @@ On Linux, also add `--add-host=host.docker.internal:host-gateway` to the `docker
 ## Integration with MCP Clients
 
 The FHIR MCP Server is designed for seamless integration with various MCP clients.
-
-The examples below leave write tools disabled, so clients can search and read but not change data. To allow changes, set `FHIR_MCP_ENABLE_WRITE_TOOLS=True` where the MCP server runs (for example in its `env` block or `.env` file). See [Tools](#tools).
 
 ### VS Code
 
@@ -456,9 +452,7 @@ uv run fhir-mcp-server --help
 - `FHIR_MCP_HOST`: The hostname or IP address the MCP server should bind to (e.g., `localhost` for local-only access, or `0.0.0.0` for all interfaces).
 - `FHIR_MCP_PORT`: The port on which the MCP server will listen for incoming client requests (e.g., `8000`).
 - `FHIR_MCP_SERVER_URL`: If set, this value will be used as the server's base URL instead of generating it from host and port. Useful for custom URL configurations or when behind a proxy.
-- `FHIR_MCP_ENABLE_WRITE_TOOLS`: If set to `True`, exposes the write tools `create`, `update`, `delete`, `execute_bundle` and `patch` (default: `False`). When `False`, MCP clients can only read.
-- `FHIR_MCP_MAX_INTERACTION_REQUEST_BYTES`: Maximum size in bytes of a Bundle or patch sent by `execute_bundle` or `patch` (default: `1048576`, 1 MiB).
-- `FHIR_MCP_MAX_INTERACTION_RESPONSE_BYTES`: Maximum size in bytes of a response accepted by `execute_bundle` or `patch` (default: `8388608`, 8 MiB).
+- `FHIR_MCP_ENABLE_WRITE_TOOLS`: Set to `True` to expose the write tools `create`, `update`, `delete`, `execute_bundle` and `patch` (default: `False`).
 - `FHIR_MCP_REQUEST_TIMEOUT`: Timeout duration in seconds for requests from the MCP server to the FHIR server (default: `30`).
 
 **MCP Server OAuth2 with FHIR server Configuration (MCP Client ↔ MCP Server):**
@@ -477,23 +471,10 @@ These variables configure the MCP client's secure connection to the MCP server, 
 ## Tools
 
 > [!IMPORTANT]
-> **Breaking change:** write tools (`create`, `update`, `delete`, `execute_bundle`
-> and `patch`) are disabled by default and are not exposed to MCP clients. Set
-> `FHIR_MCP_ENABLE_WRITE_TOOLS=True` to enable them. The FHIR server's own access
-> policies still decide what each identity may read or change.
+> The write tools `create`, `update`, `delete`, `execute_bundle` and `patch` are disabled by default. Set `FHIR_MCP_ENABLE_WRITE_TOOLS=True` to enable them.
 
-Other changes in this release:
-- `create` no longer accepts Bundles. Use `execute_bundle` instead.
-- `get_capabilities` without `type` returns a system summary. Operation details are
-  included only when `include_operations` is `true`.
-
-See [Bundle execution and JSON Patch](docs/bundle-and-patch.md) for examples, limits,
-supported routes and how to interpret partial or unknown outcomes.
-
-Tools marked **(write)** are available only when write tools are enabled.
-
-- `get_capabilities`: Retrieves the server's capabilities. With `type`, returns that resource type's search parameters, operations and interactions. Without `type`, returns the FHIR version, system interactions, supported patch formats and resource type names. The result describes what the server advertises; the server can still reject a call.
-    - `type`: (Optional) The FHIR resource type name (e.g., "Patient", "Observation", "Encounter").
+- `get_capabilities`: Retrieves metadata about a specified FHIR resource type, including its supported search parameters and custom operations. Without `type`, returns a summary of the server's capabilities.
+    - `type`: (Optional) The FHIR resource type name (e.g., "Patient", "Observation", "Encounter")
     - `include_operations`: (Optional) When `type` is omitted, also return the full list of system operations (default: `false`).
 
 - `search`: Executes a standard FHIR search interaction on a given resource type, returning a bundle or list of matching resources.
@@ -508,34 +489,34 @@ Tools marked **(write)** are available only when write tools are enabled.
     - `operation`: The name of a custom FHIR operation or extended query defined for the resource (e.g., "$everything").
     - `response_filter_fhirpaths`: (Optional) An array of FHIRPath expressions (e.g., `["Patient.name", "Observation.valueQuantity"]`) to filter the returned single resource (or entries when using custom operations like `$everything`).
 
-- `create` **(write)**: Executes a FHIR "create" interaction to persist a new resource of the specified type. Bundles are rejected; use `execute_bundle`.
+- `create`: Executes a FHIR "create" interaction to persist a new resource of the specified type. Bundles are rejected; use `execute_bundle`.
     - `type`: The FHIR resource type name (e.g., "Device", "CarePlan", "Goal").
     - `payload`: A JSON object representing the full FHIR resource body to be created.
     - `searchParam`: A mapping of FHIR search parameter names to their desired values (e.g., {"address-city":"Boston"}).
     - `operation`: The name of a custom FHIR operation or extended query defined for the resource (e.g., "$evaluate").
 
-- `update` **(write)**: Performs a FHIR "update" interaction by replacing an existing resource instance's content with the provided payload.
+- `update`: Performs a FHIR "update" interaction by replacing an existing resource instance's content with the provided payload.
     - `type`: The FHIR resource type name (e.g., "Location", "Organization", "Coverage").
     - `id`: The logical ID of a specific FHIR resource instance.
     - `payload`: The complete JSON representation of the FHIR resource, containing all required elements and any optional data.
     - `searchParam`: A mapping of FHIR search parameter names to their desired values (e.g., {"patient":"Patient/54321","relationship":"father"}).
     - `operation`: The name of a custom FHIR operation or extended query defined for the resource (e.g., "$lastn").
 
-- `delete` **(write)**: Execute a FHIR "delete" interaction on a specific resource instance.
+- `delete`: Execute a FHIR "delete" interaction on a specific resource instance.
     - `type`: The FHIR resource type name (e.g., "ServiceRequest", "Appointment", "HealthcareService").
     - `id`: The logical ID of a specific FHIR resource instance.
     - `searchParam`: A mapping of FHIR search parameter names to their desired values (e.g., {"category":"laboratory","issued:"2025-05-01"}).
     - `operation`: The name of a custom FHIR operation or extended query defined for the resource (e.g., "$expand").
 
-- `execute_bundle` **(write)**: Sends a `transaction` or `batch` Bundle to the FHIR server in a single request and returns the complete response Bundle, including each entry's status. A transaction commits all entries or none; a batch can partly succeed.
+- `execute_bundle`: Sends a `transaction` or `batch` Bundle in a single request and returns the response Bundle with each entry's status. See [Bundle execution and JSON Patch](docs/bundle-and-patch.md).
     - `bundle`: The complete Bundle resource, with `type` set to `transaction` or `batch`.
-    - `prefer`: (Optional) `representation` (default) or `minimal`, sent as the `Prefer: return=...` header.
+    - `prefer`: (Optional) `representation` (default) or `minimal`.
 
-- `patch` **(write)**: Applies a JSON Patch (RFC 6902) to one resource instance and returns the HTTP status, ETag and the server's response.
+- `patch`: Applies a JSON Patch (RFC 6902) to one resource instance.
     - `type`: The FHIR resource type name (e.g., "Patient").
     - `id`: The logical ID of the resource to patch.
     - `payload`: An array of JSON Patch operations (e.g., `[{"op": "replace", "path": "/active", "value": false}]`).
-    - `if_match`: (Optional) The resource's current ETag (e.g., `W/"7"`). If the resource has changed since, the server rejects the patch (HTTP 412, or 409 on HAPI FHIR).
+    - `if_match`: (Optional) The resource's current ETag (e.g., `W/"7"`). The server rejects the patch if the resource has changed.
     - `prefer`: (Optional) `representation` (default) or `minimal`.
 
 - `get_user`: Retrieves the currently authenticated user's FHIR resource (for example the linked `Patient` resource) and returns a concise profile containing available demographic fields such as `id`, `name`, and `birthDate`.
@@ -563,31 +544,28 @@ uv sync --dev
 
 ### Running Tests
 
-Run the full test suite, the same command CI uses:
+The project includes a comprehensive test suite covering all major functionality:
 
 ```bash
+# Simple test runner
 python run_tests.py
+
+# Or direct pytest usage
+PYTHONPATH=src python -m pytest tests/ -v --cov=src/fhir_mcp_server
 ```
-
-This runs every test under `tests/`:
-- **Unit and integration tests**: offline, with HTTP calls mocked.
-- **Local end-to-end tests** (`tests/e2e/test_bundle_patch.py`, `tests/e2e/test_credential_isolation.py` and the input-validation tests in `tests/e2e/test_tools.py`): start the MCP server and a local stub FHIR server on your machine. No internet access is needed.
-- **Live end-to-end tests** (the `test_tool_*` tests in `tests/e2e/test_tools.py`): run the MCP tools against the public [HAPI FHIR](https://hapi.fhir.org/) test server at `https://hapi.fhir.org/baseR4`. They cover every tool, including `execute_bundle` (transaction, rollback and batch) and `patch` (ETag preconditions and failed `test` operations). They need internet access and create, update and delete tagged test Patient and Observation resources on that public server, deleting them afterwards.
-
-To skip only the live HAPI tests, for example when working offline:
-
+**Using pytest:**
 ```bash
-pytest tests/ -k "not test_tool_"
+pytest tests/
 ```
+This will discover and run all tests in the `tests/` directory.
 
-The suite also contains an optional live acceptance test for `execute_bundle` and `patch` against [Aidbox](https://www.health-samurai.io/aidbox), a FHIR server from Health Samurai that enforces per-client access policies. It checks behavior the public HAPI server cannot provide, such as a transaction rolling back when one entry is forbidden. It is skipped unless you configure a disposable Aidbox instance; see [test instructions](tests/README.md#optional-aidbox-acceptance-test).
 
 **Test Features:**
+- **100+ tests** with comprehensive coverage
 - **Full async/await support** using pytest-asyncio
-- **Mocked HTTP** in unit and integration tests
-- **Local stub FHIR server** for protocol-level tests of `execute_bundle` and `patch`
-- **Live interoperability tests** against public HAPI FHIR, plus optional Aidbox acceptance
+- **Complete mocking** of HTTP requests and external dependencies
 - **Coverage reporting** with terminal and HTML output
+- **Fast execution** with no real network calls
 
 The test suite includes:
 - **Unit tests**: Core functionality testing
