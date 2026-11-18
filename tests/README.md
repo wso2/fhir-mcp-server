@@ -10,6 +10,8 @@ tests/
 ├── unit/                           # Unit tests
 │   ├── __init__.py
 │   ├── test_utils.py              # Tests for utils module (21 tests)
+│   ├── test_interaction_validation.py # execute_bundle validation and result classification
+│   ├── test_e2e_environment.py    # E2E launcher ignores deployment credentials
 │   └── oauth/                      # OAuth-related tests
 │       ├── __init__.py
 │       ├── test_types.py          # Tests for OAuth data types (34 tests)
@@ -17,11 +19,15 @@ tests/
 │       └── test_common.py         # Tests for OAuth common functions (33 tests)
 └── integration/                    # Integration tests
 │   ├── __init__.py
-│   └── test_integration.py        # Integration tests (5 tests)
+│   ├── test_integration.py        # Integration tests (5 tests)
+│   ├── test_fhir_http.py          # execute_bundle HTTP transport against a local stub
+│   └── test_interaction_handlers.py # execute_bundle handler behavior
 └── e2e/                            # End-to-end tests
     ├── __init__.py
-    ├── conftest.py
-    └── test_tools.py              # E2E tests for tool flows
+    ├── conftest.py                # Server launcher and local stub FHIR server
+    ├── test_tools.py              # E2E tests for tool flows (live, public HAPI FHIR server)
+    ├── test_execute_bundle.py     # execute_bundle over MCP against the local stub
+    └── test_credential_isolation.py # No credentials are sent to test servers
 ```
 
 ## Running Tests
@@ -157,3 +163,18 @@ When adding new tests:
 3. Mock external dependencies
 4. Test both success and failure scenarios
 5. Update this README if adding new test categories
+
+## execute_bundle tests
+
+`execute_bundle` is tested without a live FHIR server by the validation, transport and
+handler tests above and by `tests/e2e/test_execute_bundle.py`, which calls the tool over
+MCP against a local stub FHIR server that records each request.
+
+The live `test_tool_execute_bundle_*` tests in `tests/e2e/test_tools.py` run against the
+public HAPI FHIR server, like the other `test_tool_*` tests. They create test Patient and
+Observation resources tagged with the identifier system `urn:fhir-mcp-server:e2e` and
+delete them afterwards. To run without contacting a live server:
+
+```bash
+PYTHONPATH=src python -m pytest tests/ -k "not test_tool_"
+```
