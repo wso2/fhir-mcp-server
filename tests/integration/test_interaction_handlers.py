@@ -100,3 +100,44 @@ def test_positive_limits(monkeypatch):
     ):
         with pytest.raises(ValueError):
             ServerConfigs(_env_file=None, **{setting: 0})
+
+
+async def test_patch_validation_runs_before_identity(handlers, monkeypatch):
+    """Reject invalid patches without resolving credentials or contacting the server."""
+    identity = AsyncMock(side_effect=AssertionError("Must not resolve identity"))
+    monkeypatch.setattr(server, "get_user_access_token", identity)
+    for args in [
+        ("Patient", "", []),
+        ("Patient", "../admin", []),
+        ("Patient", "123", [{"op": "replace", "path": "/x"}]),
+        ("Patient", "123", [], "7"),
+        ("Patient", "123", [{"op": "remove", "path": "/x"}] * 101),
+    ]:
+        result = await handlers["patch"](*args)
+        assert result.isError
+        assert result.structuredContent["error"]["kind"] == "validation"
+    identity.assert_not_awaited()
+
+
+async def test_patch_missing_auth(handlers, monkeypatch):
+    """Report missing authentication with its own error kind."""
+    monkeypatch.setattr(server, "get_user_access_token", AsyncMock(return_value=None))
+    result = await handlers["patch"]("Patient", "123", [])
+    assert result.isError
+    assert result.structuredContent["error"]["kind"] == "authentication"
+
+
+async def test_capabilities_include_patch_formats(handlers, monkeypatch):
+    """Add the server's advertised patch formats to a resource type's capabilities."""
+    metadata = {
+        "patchFormat": ["application/json-patch+json"],
+        "rest": [{"resource": [{"type": "Patient", "interaction": []}]}],
+    }
+    monkeypatch.setattr(
+        server, "get_capability_statement", AsyncMock(return_value=metadata)
+    )
+    result = await handlers["get_capabilities"]("Patient")
+    assert result["patchFormat"] == ["application/json-patch+json"]
+    metadata.pop("patchFormat")
+    result = await handlers["get_capabilities"]("Patient")
+    assert result["patchFormat"] == []

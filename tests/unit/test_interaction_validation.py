@@ -10,7 +10,9 @@ from fhir_mcp_server.interactions import (
     serialize_request,
     validate_bundle,
     validate_bundle_request_url,
+    validate_if_match,
     validate_instance,
+    validate_patch,
 )
 from fhir_mcp_server.fhir_http import FhirHttpResponse, request_url
 
@@ -460,3 +462,117 @@ def test_resource_id_diagnostics(value, message):
     with pytest.raises(FhirInputError) as caught:
         validate_instance("Patient", value)
     assert message in str(caught.value)
+
+
+@pytest.mark.parametrize("value", [None, False, 0, "", [], {}, "é"])
+def test_patch_values_and_extra_members_preserved(value):
+    """Preserve falsey values, extra members and escaped pointers across all JSON Patch
+    operations.
+    """
+    payload = [
+        {"op": "add", "path": "/a~1b/~0", "value": value, "extra": 1},
+        {"op": "copy", "path": "", "from": "/a"},
+        {"op": "remove", "path": "/b"},
+        {"op": "move", "path": "/c", "from": "/b"},
+        {"op": "test", "path": "/c", "value": value},
+        {"op": "replace", "path": "/c", "value": value},
+    ]
+    validate_patch(payload, 100)
+    assert json.loads(serialize_request(payload, 10000)) == payload
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {},
+        [None],
+        [{"op": "add", "path": "/x"}],
+        [{"op": "remove", "path": "x"}],
+        [{"op": "copy", "path": "/x"}],
+        [{"op": "remove", "path": "/x~2"}],
+        [{"op": "bad", "path": ""}],
+        [{"op": "remove", "path": "/x"}] * 101,
+    ],
+)
+def test_invalid_patch(payload):
+    """Reject unsupported operations, missing members, invalid pointers and excessive operation
+    counts.
+    """
+    with pytest.raises(FhirInputError):
+        validate_patch(payload, 100)
+
+
+def test_patch_operation_limit_is_configurable():
+    """Apply the configured operation limit to a JSON Patch array."""
+    payload = [{"op": "remove", "path": "/x"}] * 3
+    validate_patch(payload, 3)
+    validate_patch([], 3)
+    with pytest.raises(FhirInputError) as caught:
+        validate_patch(payload, 2)
+    assert caught.value.code == "too-costly"
+
+
+@pytest.mark.parametrize("value", ['W/"7"', '"7"', 'W/"a.b-1"'])
+def test_if_match_accepts_weak_and_strong_etags(value):
+    """Accept one weak or strong entity tag."""
+    validate_if_match(value)
+
+
+@pytest.mark.parametrize(
+    "value,message",
+    [
+        ("", "cannot be empty"),
+        ("*", "Wildcard"),
+        ("7\r\nx:y", "control characters"),
+        (123, "must be a string"),
+        ("7", 'weak ETag (W/"7") or strong ETag ("7")'),
+        ('W/".."', 'weak ETag (W/"7")'),
+        ('W/"7", W/"8"', "multiple tags"),
+    ],
+)
+def test_if_match_diagnostics(value, message):
+    """Reject unquoted, empty, wildcard, multiple and control-containing If-Match values."""
+    with pytest.raises(FhirInputError) as caught:
+        validate_if_match(value)
+    assert message in str(caught.value)
+
+
+@pytest.mark.parametrize(
+    "status,body,is_json,has_body,expected",
+    [
+        (204, None, False, False, "success"),
+        (200, None, False, False, "success"),
+        (202, None, False, False, "pending"),
+        (412, {"resourceType": "OperationOutcome"}, True, True, "failure"),
+        (200, {"resourceType": "Patient", "id": "123"}, True, True, "success"),
+        (200, {"resourceType": "Patient", "id": "456"}, True, True, "unknown"),
+        (200, None, False, True, "unknown"),
+        (500, None, False, True, "failure"),
+        (
+            200,
+            {"resourceType": "OperationOutcome", "issue": [{"severity": "warning"}]},
+            True,
+            True,
+            "success",
+        ),
+        (
+            200,
+            {"resourceType": "OperationOutcome", "issue": [{"severity": "error"}]},
+            True,
+            True,
+            "failure",
+        ),
+    ],
+)
+def test_patch_outcomes(status, body, is_json, has_body, expected):
+    """Classify PATCH statuses and resource bodies without dropping observed status or ETag."""
+    result = classify_response(
+        "patch",
+        FhirHttpResponse(status, {"etag": 'W/"8"'}, body, is_json, has_body),
+        resource_type="Patient",
+        resource_id="123",
+    )
+    assert result.status == expected
+    assert result.httpStatus == status
+    assert result.headers["etag"] == 'W/"8"'
+    assert result.as_mcp().isError is (expected == "failure")

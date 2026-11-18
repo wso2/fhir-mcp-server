@@ -93,6 +93,7 @@ async def send_fhir_request(
     body: bytes,
     *,
     content_type: str = "application/fhir+json",
+    if_match: str | None = None,
     prefer: str = "representation",
     tool: str,
     count: int = 0,
@@ -112,6 +113,8 @@ async def send_fhir_request(
     }
     if access_token:
         headers["Authorization"] = "Bearer " + access_token
+    if if_match is not None:
+        headers["If-Match"] = if_match
     observed_status = None
     observed_headers = {}
     started = time.monotonic()

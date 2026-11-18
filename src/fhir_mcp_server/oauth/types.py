@@ -42,7 +42,7 @@ class ServerConfigs(BaseSettings):
     mcp_server_url: str | None = None
     mcp_request_timeout: int = 30  # in secs
 
-    # Limits for execute_bundle
+    # Limits for execute_bundle and patch
     mcp_max_bundle_entries: int = Field(default=100, gt=0)
     mcp_max_patch_operations: int = Field(default=100, gt=0)
     mcp_max_interaction_request_bytes: int = Field(default=1048576, gt=0)

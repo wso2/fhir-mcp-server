@@ -62,6 +62,31 @@ async def test_exact_requests_header_isolation_and_response_allowlist(stub):
     assert "Authorization" not in second["headers"]
 
 
+async def test_patch_request_headers(stub):
+    """Send the JSON Patch content type and If-Match to the instance URL."""
+    stub.queue(204, headers={"ETag": 'W/"2"'})
+    result = await send_fhir_request(
+        config(stub),
+        "dummy",
+        "PATCH",
+        "Patient/123",
+        b"[]",
+        content_type="application/json-patch+json",
+        if_match='W/"1"',
+        prefer="minimal",
+        tool="patch",
+    )
+    assert result.status == 204 and not result.has_body
+    assert result.headers["etag"] == 'W/"2"'
+    record = stub.records[0]
+    assert record["method"] == "PATCH"
+    assert record["path"] == "/tenant/fhir/Patient/123"
+    assert record["body"] == b"[]"
+    assert record["headers"]["If-Match"] == 'W/"1"'
+    assert record["headers"]["Content-Type"] == "application/json-patch+json"
+    assert record["headers"]["Prefer"] == "return=minimal"
+
+
 async def test_redirects_are_not_followed(stub):
     """A redirect is returned as is, so credentials are never forwarded to another server."""
     target = RecordingFhirServer()

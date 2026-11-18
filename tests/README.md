@@ -26,7 +26,7 @@ tests/
     └── test_tools.py              # E2E tests for tool flows
 ```
 
-## Bundle interaction tests
+## Bundle and PATCH interaction tests
 
 Run the offline suite with `PYTHONPATH=src python -m pytest tests/ -k "not test_tool_"`.
 In PowerShell, set `$env:PYTHONPATH = "src"` first, then run
@@ -44,7 +44,9 @@ and cleanup failures offline.
 Run live cases explicitly with
 `PYTHONPATH=src python -m pytest tests/e2e/test_tools.py -k "test_tool_"`.
 They use `https://hapi.fhir.org/baseR4` and cover transactions, rollback and partial
-batches. Writes carry unique logged identifiers. Teardown verifies ownership,
+batches. `tests/e2e/test_patch.py` covers PATCH against a local stub; the live
+PATCH case checks If-Match and failed JSON Patch test operations.
+Writes carry unique logged identifiers. Teardown verifies ownership,
 deletes Observations before Patients using the existing `delete` tool, and checks
 absence. A connection failure can prevent cleanup; reconcile only that run's
 identifiers before claiming cleanup succeeded.

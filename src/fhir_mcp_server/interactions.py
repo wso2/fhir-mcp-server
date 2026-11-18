@@ -14,7 +14,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-"""Bundle validation and result classification for execute_bundle. No network access."""
+"""Input validation and result classification for execute_bundle and patch. No network access."""
 
 from copy import deepcopy
 from datetime import datetime
@@ -58,7 +58,7 @@ class InteractionError(BaseModel):
 
 
 class FhirInteractionResult(BaseModel):
-    interaction: Literal["transaction", "batch"] | None
+    interaction: Literal["transaction", "batch", "patch"] | None
     httpStatus: int | None = None
     status: Literal["success", "partial", "failure", "pending", "unknown"]
     headers: dict[str, str] = Field(default_factory=dict)
@@ -133,6 +133,77 @@ def validate_prefer(prefer: str) -> None:
     """Accept only the supported minimal and representation return preferences."""
     if prefer not in ("minimal", "representation"):
         raise FhirInputError("Prefer must be minimal or representation.")
+
+
+def validate_if_match(value: str | None) -> None:
+    """Accept one weak (W/"7") or strong ("7") entity tag, without rewriting it.
+
+    FHIR represents a resource version as a weak ETag, and HTTP requires entity tags to
+    be quoted (RFC 9110).
+    """
+    if value is None:
+        return
+    if not isinstance(value, str):
+        raise FhirInputError("If-Match must be a string containing one ETag.")
+    if not value:
+        raise FhirInputError(
+            "If-Match cannot be empty; omit it for an unconditional PATCH."
+        )
+    if CONTROL.search(value):
+        raise FhirInputError("If-Match must not contain control characters.")
+    if value == "*":
+        raise FhirInputError(
+            "Wildcard If-Match is not supported; supply the resource's version ETag."
+        )
+    match = re.fullmatch(r'(?:W/)?"([A-Za-z0-9.-]{1,64})"', value)
+    if not match or not match[1].strip("."):
+        raise FhirInputError(
+            'Invalid If-Match: use one weak ETag (W/"7") or strong ETag ("7"). '
+            "The version must be 1-64 letters, digits, hyphens or dots, not only dots; "
+            "multiple tags are not supported."
+        )
+
+
+def validate_pointer(value: Any, member: str = "path") -> None:
+    """Check JSON Pointer syntax, including escapes, for a named patch member."""
+    if not isinstance(value, str):
+        raise FhirInputError(f"Patch '{member}' must be a JSON Pointer string.")
+    if (value and not value.startswith("/")) or re.search(r"~(?![01])", value):
+        raise FhirInputError(
+            f"Invalid JSON Pointer in patch '{member}': use an empty string or a "
+            "path starting with '/', with '~' escaped as '~0' or '~1'."
+        )
+
+
+def validate_patch(payload: Any, max_operations: int) -> None:
+    """Check operation count and JSON Patch members without evaluating resource paths."""
+    if not isinstance(payload, list):
+        raise FhirInputError("JSON Patch must be an array of operation objects.")
+    if len(payload) > max_operations:
+        raise FhirInputError("Too many patch operations.", "too-costly")
+    for item in payload:
+        if not isinstance(item, dict) or item.get("op") not in (
+            "add",
+            "remove",
+            "replace",
+            "move",
+            "copy",
+            "test",
+        ):
+            raise FhirInputError("Unsupported or missing JSON Patch operation.")
+        if "path" not in item:
+            raise FhirInputError(
+                "Patch operation requires a 'path' member.", "required"
+            )
+        validate_pointer(item["path"])
+        if item["op"] in ("add", "replace", "test") and "value" not in item:
+            raise FhirInputError("Patch operation requires a value member.")
+        if item["op"] in ("move", "copy"):
+            if "from" not in item:
+                raise FhirInputError(
+                    "Patch move/copy requires a 'from' member.", "required"
+                )
+            validate_pointer(item["from"], "from")
 
 
 def validate_query(query: str) -> None:
@@ -357,7 +428,9 @@ def classify_response(
     interaction: str,
     http: Any,
     *,
-    bundle: dict,
+    bundle: dict | None = None,
+    resource_type: str | None = None,
+    resource_id: str | None = None,
 ) -> FhirInteractionResult:
     """Classify HTTP and per-entry outcomes while preserving the complete response.
 
@@ -408,6 +481,28 @@ def classify_response(
         return fail(
             "protocol",
             "FHIR server returned an unreadable success body; reconcile server state before retrying.",
+        )
+    if interaction == "patch":
+        if not http.has_body:
+            return result
+        if (
+            outcome
+            and body["issue"]
+            and all(
+                isinstance(i, dict) and i.get("severity") in ("information", "warning")
+                for i in body["issue"]
+            )
+        ):
+            return result
+        if (
+            isinstance(body, dict)
+            and body.get("resourceType") == resource_type
+            and body.get("id") == resource_id
+        ):
+            return result
+        return fail(
+            "protocol",
+            "PATCH returned an unexpected resource; reconcile server state before retrying.",
         )
     if (
         not isinstance(body, dict)

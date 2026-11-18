@@ -223,7 +223,7 @@ async def test_tool_delete(mcp_server, patient_id):
 
 
 # ---------------------------------------------------------------------------
-# Live execute_bundle tests against public HAPI FHIR
+# Live execute_bundle and patch tests against public HAPI FHIR
 #
 # Each test tags its resources with a unique identifier and deletes them
 # afterwards, so reruns and concurrent runs do not interfere.
@@ -425,6 +425,69 @@ async def test_tool_execute_bundle_batch_partial(mcp_server, resource_tag):
     assert not tool_result.isError
     assert [entry_status(e) for e in entries] == [201, 404], f"Unexpected statuses: {result}"
     assert result["summary"]["succeeded"] == 1 and result["summary"]["failed"] == 1
+
+
+@pytest.mark.asyncio
+async def test_tool_patch(mcp_server, patient_id):
+    try:
+        patient = await call_tool("read", {"type": "Patient", "id": patient_id})
+        version = patient["meta"]["versionId"]
+        etag = f'W/"{version}"'
+
+        tool_result = await call_tool_result(
+            "patch",
+            {
+                "type": "Patient",
+                "id": patient_id,
+                "if_match": etag,
+                "payload": [
+                    {"op": "test", "path": "/gender", "value": "male"},
+                    {"op": "replace", "path": "/gender", "value": "female"},
+                ],
+            },
+        )
+        result = structured(tool_result)
+        assert not tool_result.isError, f"Patch failed: {result}"
+        assert result["interaction"] == "patch"
+        assert result["status"] == "success"
+        assert result["httpStatus"] == 200
+        assert result["response"]["gender"] == "female"
+        # Servers may omit the ETag header on PATCH; the new version is in the resource.
+        assert result["response"]["meta"]["versionId"] != version, f"Version did not change: {result}"
+
+        # Reusing the old ETag is rejected because the resource has changed.
+        # The FHIR specification uses 412; some servers return 409.
+        stale_result = await call_tool_result(
+            "patch",
+            {
+                "type": "Patient",
+                "id": patient_id,
+                "if_match": etag,
+                "payload": [{"op": "replace", "path": "/gender", "value": "other"}],
+            },
+        )
+        stale = structured(stale_result)
+        assert stale_result.isError and stale["httpStatus"] in (409, 412), f"Stale ETag accepted: {stale}"
+
+        # A failing `test` operation rejects the whole patch.
+        failed_result = await call_tool_result(
+            "patch",
+            {
+                "type": "Patient",
+                "id": patient_id,
+                "payload": [
+                    {"op": "test", "path": "/gender", "value": "male"},
+                    {"op": "replace", "path": "/gender", "value": "other"},
+                ],
+            },
+        )
+        failed = structured(failed_result)
+        assert failed_result.isError and failed["httpStatus"] >= 400, f"Failed test op applied: {failed}"
+
+        patient = await call_tool("read", {"type": "Patient", "id": patient_id})
+        assert patient["gender"] == "female", f"Rejected patches changed the Patient: {patient}"
+    finally:
+        await delete_resource(f"Patient/{patient_id}")
 
 
 async def extract_resource(tool_result: types.CallToolResult) -> Dict:

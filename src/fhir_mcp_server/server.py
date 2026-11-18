@@ -60,6 +60,9 @@ from fhir_mcp_server.interactions import (
     local_failure,
     serialize_request,
     validate_bundle,
+    validate_if_match,
+    validate_instance,
+    validate_patch,
     validate_prefer,
 )
 from starlette.requests import Request
@@ -267,6 +270,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                         "interaction": resource.get("interaction", []),
                         "searchInclude": resource.get("searchInclude", []),
                         "searchRevInclude": resource.get("searchRevInclude", []),
+                        "patchFormat": data.get("patchFormat", []),
                     }
             logger.info(f"Resource type '{type}' not found in the CapabilityStatement.")
             return await get_operation_outcome(
@@ -861,6 +865,94 @@ def register_mcp_tools(mcp: FastMCP) -> None:
         except FhirTransportError as error:
             return FhirInteractionResult(
                 interaction=interaction,
+                status="unknown" if error.uncertain else "failure",
+                httpStatus=error.status,
+                headers=error.headers,
+                error=InteractionError(kind=error.kind, message=str(error)),
+            ).as_mcp()
+
+    @mcp.tool(
+        description=(
+            "Applies a JSON Patch (RFC 6902) to one FHIR resource instance using HTTP PATCH "
+            "(FHIR `patch` interaction: PATCH [base]/{type}/{id}). "
+            "Use it to change specific elements of an existing resource without replacing it. "
+            "Pass the resource's current ETag from a prior read as if_match (for example W/\"7\") "
+            "so the server rejects the patch if the resource has changed since, especially for "
+            "edits to array elements by index. If it is rejected as stale, read the resource again "
+            "and reassess the change instead of retrying. Without if_match the patch is unconditional. "
+            "After a timeout the patch may have been applied; read the resource before retrying."
+        ),
+        annotations=ToolAnnotations(
+            readOnlyHint=False,
+            destructiveHint=True,
+            idempotentHint=False,
+            openWorldHint=True,
+        ),
+    )
+    async def patch(
+        type: Annotated[
+            str,
+            Field(
+                description="The FHIR resource type name.",
+                examples=["Patient", "Observation"],
+            ),
+        ],
+        id: Annotated[
+            str, Field(description="The logical ID of the resource to patch.")
+        ],
+        payload: Annotated[
+            List[Dict[str, Any]],
+            Field(
+                description="An array of JSON Patch operations (add, remove, replace, move, copy, test).",
+                examples=[[{"op": "replace", "path": "/active", "value": False}]],
+            ),
+        ],
+        if_match: Annotated[
+            str | None,
+            Field(
+                description='Optional. The current ETag of the resource, weak (W/"7") or strong ("7"), sent as If-Match.'
+            ),
+        ] = None,
+        prefer: Annotated[
+            Literal["minimal", "representation"],
+            Field(
+                description="Sent as the Prefer: return=... header. 'representation' asks the server to return the patched resource."
+            ),
+        ] = "representation",
+    ) -> Annotated[CallToolResult, FhirInteractionResult]:
+        try:
+            validate_instance(type, id)
+            validate_if_match(if_match)
+            validate_prefer(prefer)
+            validate_patch(payload, configs.mcp_max_patch_operations)
+            body = serialize_request(
+                payload, configs.mcp_max_interaction_request_bytes
+            )
+            access_token = await resolve_fhir_access_token()
+            response = await send_fhir_request(
+                configs,
+                access_token,
+                "PATCH",
+                f"{type}/{id}",
+                body,
+                content_type="application/json-patch+json",
+                if_match=if_match,
+                prefer=prefer,
+                tool="patch",
+                count=len(payload),
+            )
+            return classify_response(
+                "patch", response, resource_type=type, resource_id=id
+            ).as_mcp()
+        except FhirInputError as error:
+            return local_failure("patch", "validation", str(error), error.code).as_mcp()
+        except FhirAuthenticationError:
+            return local_failure(
+                "patch", "authentication", "User is not authenticated.", "forbidden"
+            ).as_mcp()
+        except FhirTransportError as error:
+            return FhirInteractionResult(
+                interaction="patch",
                 status="unknown" if error.uncertain else "failure",
                 httpStatus=error.status,
                 headers=error.headers,
