@@ -1,8 +1,10 @@
 # FHIR MCP Server Test Suite
 
-This directory contains comprehensive test cases for the FHIR MCP server, including unit tests and integration tests with proper mocking to avoid external dependencies.
+This directory contains comprehensive test cases for the FHIR MCP server, including mocked unit/integration tests, local HTTP/MCP tests, and live tests against a public FHIR server.
 
 ## Test Structure
+
+The original suite layout is below; new interaction tests are listed in the next section.
 
 ```
 tests/
@@ -24,7 +26,33 @@ tests/
     └── test_tools.py              # E2E tests for tool flows
 ```
 
+## Bundle interaction tests
+
+Run the offline suite with `PYTHONPATH=src python -m pytest tests/ -k "not test_tool_"`.
+In PowerShell, set `$env:PYTHONPATH = "src"` first, then run
+`.venv\Scripts\python.exe -m pytest tests/ -k "not test_tool_"`.
+Only live cases should have `test_tool_` in their names; check selection with
+`python -m pytest tests/ --collect-only -k "test_tool_"`.
+
+New tests cover validation/results (`tests/unit/test_interaction_validation.py`),
+HTTP transport and handlers (`tests/integration/test_fhir_http.py` and
+`test_interaction_handlers.py`), and MCP calls (`tests/e2e/test_execute_bundle.py`).
+`test_credential_isolation.py` checks that test servers receive no deployment
+credentials from the environment or `.env`; `test_live_cleanup.py` checks ownership
+and cleanup failures offline.
+
+Run live cases explicitly with
+`PYTHONPATH=src python -m pytest tests/e2e/test_tools.py -k "test_tool_"`.
+They use `https://hapi.fhir.org/baseR4` and cover transactions, rollback and partial
+batches. Writes carry unique logged identifiers. Teardown verifies ownership,
+deletes Observations before Patients using the existing `delete` tool, and checks
+absence. A connection failure can prevent cleanup; reconcile only that run's
+identifiers before claiming cleanup succeeded.
+
 ## Running Tests
+
+The full-suite commands below include live tests that create and delete resources on
+the public HAPI server. For offline development, use the selection described below.
 
 ### Option 1: Using the test runner script (Recommended)
 ```bash
@@ -51,7 +79,8 @@ PYTHONPATH=src python -m pytest tests/unit/test_utils.py -v
 
 ## Test Coverage
 
-The test suite achieves the following coverage:
+The following figures are a historical baseline, not current coverage. Use the
+coverage report from your selected test run for current measurements:
 
 - **utils.py**: 100% coverage (41/41 statements)
 - **oauth/types.py**: 99% coverage (79/80 statements)
@@ -59,7 +88,8 @@ The test suite achieves the following coverage:
 - **oauth/client_provider.py**: 99% coverage (111/112 statements)
 - **Overall coverage**: 53% (335/635 statements)
 
-*Note: The server.py module is not tested as it contains the main application logic that would require a full server setup. The OAuth server provider is partially tested due to its complexity.*
+*Note: Handler tests and MCP end-to-end tests exercise server.py. Coverage of the
+MCP subprocess is not automatically included in the parent pytest process report.*
 
 ## Test Categories
 
@@ -106,8 +136,8 @@ The test suite achieves the following coverage:
 ## Test Features
 
 ### Comprehensive Mocking
-- All external HTTP requests are mocked
-- No real network calls during testing
+- Unit tests mock external HTTP requests
+- Offline transport/MCP tests use loopback connections; live tests use a public server
 - Isolated testing of individual components
 
 ### Async Testing Support
