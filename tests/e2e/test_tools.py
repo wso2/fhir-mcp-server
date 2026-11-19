@@ -276,16 +276,16 @@ def structured(tool_result: types.CallToolResult) -> Dict:
 
 async def delete_resource(reference: str) -> None:
     """Delete one test resource and confirm the server accepted the deletion."""
-    bundle = {
-        "resourceType": "Bundle",
-        "type": "batch",
-        "entry": [{"request": {"method": "DELETE", "url": reference}}],
-    }
-    result = structured(await call_tool_result("execute_bundle", {"bundle": bundle}))
-    status = entry_status(result["response"]["entry"][0])
-    assert 200 <= status < 300 or status in (404, 410), (
-        f"Cleanup of {reference} failed: {result}"
+    resource_type, resource_id = reference.split("/", 1)
+    result = await call_tool("delete", {"type": resource_type, "id": resource_id})
+    assert isinstance(result, dict) and result.get("resourceType") == "OperationOutcome", (
+        f"Unexpected cleanup response for {reference}: {result}"
     )
+    issues = result.get("issue")
+    assert isinstance(issues, list) and issues and all(
+        isinstance(issue, dict) and issue.get("severity") in ("information", "warning")
+        for issue in issues
+    ), f"Cleanup of {reference} failed: {result}"
 
 
 async def tagged_ids(resource_type: str, tag: str) -> list[str]:
