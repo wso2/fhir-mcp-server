@@ -29,7 +29,7 @@ server reject the whole patch.
 weak ETag (`W/"7"`) or a strong one (`"7"`), and it is sent unchanged as the `If-Match`
 header. FHIR represents a resource version as a weak ETag, `W/"` + `meta.versionId` +
 `"`. If the resource has changed since, the server rejects the patch: the FHIR
-specification uses HTTP 412, and some servers return 409. In either case, read the
+specification uses HTTP 412. Read the
 resource again and reassess the change instead of retrying. Without `if_match` the patch
 is applied to whatever version is current, which can be unsafe for edits to array
 elements by index.
@@ -44,8 +44,10 @@ Wildcards (`*`), multiple tags and unquoted values are rejected.
 `patch` returns the same result object as `execute_bundle` (see
 [Executing transaction and batch Bundles](execute-bundle.md#results)), with
 `interaction` set to `patch` and no `summary`. `response` holds the patched resource
-when the server returns one. `headers` includes `etag` when the server sends it; if it
-does not, the new version is in `response.meta.versionId`.
+when the server returns one. `headers` includes `etag` when the server sends it.
+Otherwise, use `response.meta.versionId` if a resource containing that field is
+returned. A successful response may contain neither an ETag nor a resource body,
+especially with `prefer: "minimal"`; read the resource again to obtain its version.
 
 | `status` | Meaning | MCP `isError` |
 |---|---|---|
