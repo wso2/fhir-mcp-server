@@ -2,7 +2,7 @@ import socket
 
 import pytest
 
-from fhir_mcp_server.errors import FhirTransportError
+from fhir_mcp_server.errors import FhirInputError, FhirTransportError
 from fhir_mcp_server.fhir_http import send_fhir_request
 from fhir_mcp_server.oauth import ServerConfigs
 from tests.e2e.conftest import RecordingFhirServer
@@ -74,6 +74,22 @@ async def test_redirects_are_not_followed(stub):
         assert len(stub.requests) == 1
     finally:
         target.stop()
+
+
+async def test_request_byte_limit_blocks_dispatch_and_accepts_exact_boundary(stub):
+    body = '{"resourceType":"Patient","name":[{"text":"é"}]}'.encode("utf-8")
+    with pytest.raises(FhirInputError, match="byte limit"):
+        await send_fhir_request(
+            config(stub, mcp_max_interaction_request_bytes=len(body) - 1),
+            None, "POST", "", body, tool="execute_bundle",
+        )
+    assert stub.requests == []
+    await send_fhir_request(
+        config(stub, mcp_max_interaction_request_bytes=len(body)),
+        None, "POST", "", body, tool="execute_bundle",
+    )
+    assert len(stub.records) == 1
+    assert stub.records[0]["body"] == body
 
 
 @pytest.mark.parametrize(

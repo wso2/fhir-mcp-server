@@ -102,6 +102,8 @@ async def send_fhir_request(
     Return the observed status, allowlisted headers and parsed JSON body. A failure after
     the request was sent is uncertain, because the server may have applied it.
     """
+    if len(body) > config.mcp_max_interaction_request_bytes:
+        raise FhirInputError("Request exceeds the configured byte limit.", "too-costly")
     url = request_url(config.server_base_url, relative_path)
     headers = {
         "Accept": "application/fhir+json",

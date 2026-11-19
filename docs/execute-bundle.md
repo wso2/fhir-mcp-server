@@ -36,8 +36,10 @@ The tool sends the Bundle in one POST to the configured FHIR base. It does not s
 reorder, retry or simulate it.
 
 Batch entries must not depend on each other; the server may process them in any order.
-The tool rejects a batch in which one entry references another entry's `urn:uuid` or
-`urn:oid`, but it cannot detect every dependency. Use a transaction for related changes.
+The tool scans string values under `reference` keys in entry resources and rejects
+references to another POST entry's `fullUrl` beginning with `urn:uuid:` or `urn:oid:`.
+It does not detect references to PUT entries, references in other fields such as
+`Attachment.url`, or every other dependency. Use a transaction for related changes.
 
 `prefer` is optional: `representation` (default) or `minimal`, sent as the
 `Prefer: return=...` header. Servers may return less than requested.
@@ -92,8 +94,8 @@ structured content and as JSON text:
 | `status` | Meaning | MCP `isError` |
 |---|---|---|
 | `success` | Every entry succeeded | false |
-| `partial` | A batch in which some entries succeeded and others failed | false |
-| `pending` | The server accepted the request for asynchronous processing (HTTP 202) | false |
+| `partial` | A batch with failed entries and at least one successful or pending entry | false |
+| `pending` | The request or at least one entry was accepted for asynchronous processing (HTTP 202), with no failed entries | false |
 | `unknown` | The outcome cannot be determined, for example after a timeout or an inconsistent response | false |
 | `failure` | Nothing was applied: the input was rejected, or the server rejected the request | true |
 
