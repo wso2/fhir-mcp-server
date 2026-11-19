@@ -452,6 +452,10 @@ uv run fhir-mcp-server --help
 - `FHIR_MCP_HOST`: The hostname or IP address the MCP server should bind to (e.g., `localhost` for local-only access, or `0.0.0.0` for all interfaces).
 - `FHIR_MCP_PORT`: The port on which the MCP server will listen for incoming client requests (e.g., `8000`).
 - `FHIR_MCP_SERVER_URL`: If set, this value will be used as the server's base URL instead of generating it from host and port. Useful for custom URL configurations or when behind a proxy.
+- `FHIR_MCP_MAX_BUNDLE_ENTRIES`: Maximum number of entries in a Bundle sent by `execute_bundle` (default: `100`).
+- `FHIR_MCP_MAX_PATCH_OPERATIONS`: Maximum number of operations in a `patch` call or in a PATCH entry of a Bundle (default: `100`).
+- `FHIR_MCP_MAX_INTERACTION_REQUEST_BYTES`: Maximum size in bytes of a Bundle or patch sent by `execute_bundle` or `patch` (default: `1048576`).
+- `FHIR_MCP_MAX_INTERACTION_RESPONSE_BYTES`: Maximum size in bytes of a response accepted by `execute_bundle` or `patch` (default: `8388608`).
 - `FHIR_MCP_REQUEST_TIMEOUT`: Timeout duration in seconds for requests from the MCP server to the FHIR server (default: `30`).
 
 **MCP Server OAuth2 with FHIR server Configuration (MCP Client ↔ MCP Server):**
@@ -502,6 +506,17 @@ These variables configure the MCP client's secure connection to the MCP server, 
     - `id`: The logical ID of a specific FHIR resource instance.
     - `searchParam`: A mapping of FHIR search parameter names to their desired values (e.g., {"category":"laboratory","issued:"2025-05-01"}).
     - `operation`: The name of a custom FHIR operation or extended query defined for the resource (e.g., "$expand").
+
+- `execute_bundle`: Executes a FHIR `transaction` or `batch` Bundle in one request. Returns a result object, not a Bundle: its `status` is `success`, `partial`, `failure`, `pending` (HTTP 202) or `unknown`, and its `response` field holds the server's response Bundle with each entry's status. Only `failure` is reported as an MCP error. See [Executing transaction and batch Bundles](docs/execute-bundle.md).
+    - `bundle`: The complete Bundle resource, with `type` set to `transaction` or `batch`.
+    - `prefer`: (Optional) `representation` (default) or `minimal`, sent as the `Prefer: return=...` header.
+
+- `patch`: Applies a JSON Patch (RFC 6902) to one resource instance and returns a result object with the HTTP status, ETag and the server's response. See [Patching a resource with JSON Patch](docs/patch.md).
+    - `type`: The FHIR resource type name (e.g., "Patient").
+    - `id`: The logical ID of the resource to patch.
+    - `payload`: An array of JSON Patch operations (e.g., `[{"op": "replace", "path": "/active", "value": false}]`).
+    - `if_match`: (Optional) The resource's current ETag (e.g., `W/"7"`). The server rejects the patch if the resource has changed.
+    - `prefer`: (Optional) `representation` (default) or `minimal`.
 
 - `get_user`: Retrieves the currently authenticated user's FHIR resource (for example the linked `Patient` resource) and returns a concise profile containing available demographic fields such as `id`, `name`, and `birthDate`.
 

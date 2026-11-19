@@ -43,9 +43,28 @@ from fhirpy import AsyncFHIRClient
 from fhirpy.lib import AsyncFHIRResource
 from fhirpy.base.exceptions import OperationOutcome, ResourceNotFound
 from fhirpy.base.searchset import Raw
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Literal
 from typing_extensions import Annotated
 from pydantic import AnyHttpUrl, Field
+from mcp.types import CallToolResult, ToolAnnotations
+from fhir_mcp_server.errors import (
+    FhirAuthenticationError,
+    FhirInputError,
+    FhirTransportError,
+)
+from fhir_mcp_server.fhir_http import send_fhir_request
+from fhir_mcp_server.interactions import (
+    FhirInteractionResult,
+    InteractionError,
+    classify_response,
+    local_failure,
+    serialize_request,
+    validate_bundle,
+    validate_if_match,
+    validate_instance,
+    validate_patch,
+    validate_prefer,
+)
 from starlette.requests import Request
 from starlette.responses import RedirectResponse, Response
 from mcp.server.auth.middleware.auth_context import get_access_token
@@ -90,6 +109,21 @@ async def get_user_access_token() -> OAuthToken | None:
     )
 
 
+async def resolve_fhir_access_token() -> str | None:
+    """
+    Get the access token to send to the FHIR server for the current request.
+    Returns None when authorization is disabled and there is no user token.
+    Raises FhirAuthenticationError when authorization is required but the user has no token.
+    """
+    user_token: OAuthToken | None = await get_user_access_token()
+    if user_token:
+        return user_token.access_token
+    if not configs.server_disable_authorization:
+        logger.error("User is not authenticated.")
+        raise FhirAuthenticationError("User is not authenticated.")
+    return None
+
+
 async def get_async_fhir_client() -> AsyncFHIRClient:
     """
     Get an async FHIR client with the user's access token.
@@ -99,15 +133,9 @@ async def get_async_fhir_client() -> AsyncFHIRClient:
         "config": configs,
         "extra_headers": get_default_headers(),
     }
-
-    user_token: OAuthToken | None = await get_user_access_token()
-    disable_auth: bool = configs.server_disable_authorization
-    if not user_token:
-        if not disable_auth:
-            logger.error("User is not authenticated.")
-            raise ValueError("User is not authenticated.")
-    else:
-        client_kwargs["access_token"] = user_token.access_token
+    access_token = await resolve_fhir_access_token()
+    if access_token:
+        client_kwargs["access_token"] = access_token
 
     return await create_async_fhir_client(**client_kwargs)
 
@@ -242,6 +270,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                         "interaction": resource.get("interaction", []),
                         "searchInclude": resource.get("searchInclude", []),
                         "searchRevInclude": resource.get("searchRevInclude", []),
+                        "patchFormat": data.get("patchFormat", []),
                     }
             logger.info(f"Resource type '{type}' not found in the CapabilityStatement.")
             return await get_operation_outcome(
@@ -319,7 +348,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
             )
             logger.debug("Async resources fetched: %s", async_resources)
             return filter_response_fields(async_resources, response_filter_fhirpaths)
-        except ValueError as ex:
+        except FhirAuthenticationError as ex:
             logger.exception(
                 f"User does not have permission to perform FHIR '{type}' resource search operation. Caused by, ",
                 exc_info=ex,
@@ -426,7 +455,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                 code="not-found",
                 diagnostics=f"The resource of type '{type}' with id '{id}' was not found.",
             )
-        except ValueError as ex:
+        except FhirAuthenticationError as ex:
             logger.exception(
                 f"User does not have permission to perform FHIR '{type}' resource read operation. Caused by, ",
                 exc_info=ex,
@@ -536,7 +565,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
             )
 
             return await extract_bundle_resources(bundle=bundle)
-        except ValueError as ex:
+        except FhirAuthenticationError as ex:
             logger.exception(
                 f"User does not have permission to perform FHIR '{type}' resource create operation. Caused by, ",
                 exc_info=ex,
@@ -646,7 +675,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                 params=searchParam,
             )
             return await extract_bundle_resources(bundle=bundle)
-        except ValueError as ex:
+        except FhirAuthenticationError as ex:
             logger.exception(
                 f"User does not have permission to perform FHIR '{type}' resource update operation. Caused by, ",
                 exc_info=ex,
@@ -745,7 +774,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                 code="SUCCESSFUL_DELETE",
                 diagnostics="Successfully deleted resource(s).",
             )
-        except ValueError as ex:
+        except FhirAuthenticationError as ex:
             logger.exception(
                 f"User does not have permission to perform FHIR '{type}' resource delete operation. Caused by, ",
                 exc_info=ex,
@@ -766,6 +795,169 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                 exc_info=ex,
             )
         return await get_operation_outcome_exception()
+
+    @mcp.tool(
+        description=(
+            "Executes a FHIR transaction or batch Bundle in one request to the FHIR server base. "
+            "A transaction is applied atomically: all entries succeed or none do. A batch runs its entries "
+            "independently, so some can succeed while others fail; batch entries must not depend on each other. "
+            "Inspect each entry's response.status in the result; HTTP success alone does not mean every batch entry succeeded. "
+            "Calling it again repeats the writes. After a timeout or a partial or unknown result, read the current "
+            "server state before retrying, and do not resend entries that already succeeded. "
+            "Supports type searches, instance read/create/update/delete, conditional update/delete and FHIRPath "
+            "Parameters PATCH entries; operations, history and HEAD are not supported."
+        ),
+        annotations=ToolAnnotations(
+            readOnlyHint=False,
+            destructiveHint=True,
+            idempotentHint=False,
+            openWorldHint=True,
+        ),
+    )
+    async def execute_bundle(
+        bundle: Annotated[
+            Dict[str, Any],
+            Field(
+                description="A FHIR Bundle resource with type 'transaction' or 'batch' and at least one entry."
+            ),
+        ],
+        prefer: Annotated[
+            Literal["minimal", "representation"],
+            Field(
+                description="Sent as the Prefer: return=... header. 'representation' asks the server to return written resources."
+            ),
+        ] = "representation",
+    ) -> Annotated[CallToolResult, FhirInteractionResult]:
+        bundle_type = bundle.get("type") if isinstance(bundle, dict) else None
+        interaction = bundle_type if bundle_type in ("transaction", "batch") else None
+        try:
+            validate_prefer(prefer)
+            # Bound the input before copying and traversing it.
+            serialize_request(bundle, configs.mcp_max_interaction_request_bytes)
+            outbound = validate_bundle(
+                bundle,
+                configs.mcp_max_bundle_entries,
+                configs.mcp_max_patch_operations,
+            )
+            body = serialize_request(
+                outbound, configs.mcp_max_interaction_request_bytes
+            )
+            access_token = await resolve_fhir_access_token()
+            response = await send_fhir_request(
+                configs,
+                access_token,
+                "POST",
+                "",
+                body,
+                prefer=prefer,
+                tool="execute_bundle",
+                count=len(outbound["entry"]),
+            )
+            return classify_response(interaction, response, bundle=outbound).as_mcp()
+        except FhirInputError as error:
+            return local_failure(
+                interaction, "validation", str(error), error.code
+            ).as_mcp()
+        except FhirAuthenticationError:
+            return local_failure(
+                interaction, "authentication", "User is not authenticated.", "forbidden"
+            ).as_mcp()
+        except FhirTransportError as error:
+            return FhirInteractionResult(
+                interaction=interaction,
+                status="unknown" if error.uncertain else "failure",
+                httpStatus=error.status,
+                headers=error.headers,
+                error=InteractionError(kind=error.kind, message=str(error)),
+            ).as_mcp()
+
+    @mcp.tool(
+        description=(
+            "Applies a JSON Patch (RFC 6902) to one FHIR resource instance using HTTP PATCH "
+            "(FHIR `patch` interaction: PATCH [base]/{type}/{id}). "
+            "Use it to change specific elements of an existing resource without replacing it. "
+            "Pass the resource's current ETag from a prior read as if_match (for example W/\"7\") "
+            "so the server rejects the patch if the resource has changed since, especially for "
+            "edits to array elements by index. If it is rejected as stale, read the resource again "
+            "and reassess the change instead of retrying. Without if_match the patch is unconditional. "
+            "After a timeout the patch may have been applied; read the resource before retrying."
+        ),
+        annotations=ToolAnnotations(
+            readOnlyHint=False,
+            destructiveHint=True,
+            idempotentHint=False,
+            openWorldHint=True,
+        ),
+    )
+    async def patch(
+        type: Annotated[
+            str,
+            Field(
+                description="The FHIR resource type name.",
+                examples=["Patient", "Observation"],
+            ),
+        ],
+        id: Annotated[
+            str, Field(description="The logical ID of the resource to patch.")
+        ],
+        payload: Annotated[
+            List[Dict[str, Any]],
+            Field(
+                description="An array of JSON Patch operations (add, remove, replace, move, copy, test).",
+                examples=[[{"op": "replace", "path": "/active", "value": False}]],
+            ),
+        ],
+        if_match: Annotated[
+            str | None,
+            Field(
+                description='Optional. The current ETag of the resource, weak (W/"7") or strong ("7"), sent as If-Match.'
+            ),
+        ] = None,
+        prefer: Annotated[
+            Literal["minimal", "representation"],
+            Field(
+                description="Sent as the Prefer: return=... header. 'representation' asks the server to return the patched resource."
+            ),
+        ] = "representation",
+    ) -> Annotated[CallToolResult, FhirInteractionResult]:
+        try:
+            validate_instance(type, id)
+            validate_if_match(if_match)
+            validate_prefer(prefer)
+            validate_patch(payload, configs.mcp_max_patch_operations)
+            body = serialize_request(
+                payload, configs.mcp_max_interaction_request_bytes
+            )
+            access_token = await resolve_fhir_access_token()
+            response = await send_fhir_request(
+                configs,
+                access_token,
+                "PATCH",
+                f"{type}/{id}",
+                body,
+                content_type="application/json-patch+json",
+                if_match=if_match,
+                prefer=prefer,
+                tool="patch",
+                count=len(payload),
+            )
+            return classify_response(
+                "patch", response, resource_type=type, resource_id=id
+            ).as_mcp()
+        except FhirInputError as error:
+            return local_failure("patch", "validation", str(error), error.code).as_mcp()
+        except FhirAuthenticationError:
+            return local_failure(
+                "patch", "authentication", "User is not authenticated.", "forbidden"
+            ).as_mcp()
+        except FhirTransportError as error:
+            return FhirInteractionResult(
+                interaction="patch",
+                status="unknown" if error.uncertain else "failure",
+                httpStatus=error.status,
+                headers=error.headers,
+                error=InteractionError(kind=error.kind, message=str(error)),
+            ).as_mcp()
 
     @mcp.tool(
         description=(
@@ -826,7 +1018,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
             )
             return profile
 
-        except ValueError as ex:
+        except FhirAuthenticationError as ex:
             logger.exception(
                 "Authorization error occurred while reading user resource. Caused by, ",
                 exc_info=ex,
